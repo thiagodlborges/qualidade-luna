@@ -497,7 +497,7 @@ async function renderDesempenho(){
       },
       options: { scales: { y: { min:0, max:100 } }, plugins:{ legend:{display:false} } },
     });
-  } else { $('chartChecklist').replaceWith('<div class="empty">Nenhum checklist registrado ainda.</div>'); }
+  } else { $('chartChecklist').outerHTML = '<div class="empty">Nenhum checklist registrado ainda.</div>'; }
 
   const avals = avalR.data||[];
   if(chartAvaliacaoRef) chartAvaliacaoRef.destroy();
@@ -514,7 +514,7 @@ async function renderDesempenho(){
       },
       options: { scales: { y: { min:0, max:100 } }, plugins:{ legend:{display:false} } },
     });
-  } else { $('chartAvaliacao').replaceWith('<div class="empty">Nenhuma avaliação externa registrada ainda pra esta loja.</div>'); }
+  } else { $('chartAvaliacao').outerHTML = '<div class="empty">Nenhuma avaliação externa registrada ainda pra esta loja.</div>'; }
 }
 
 // ══════════════════════════════════════════════════════════
