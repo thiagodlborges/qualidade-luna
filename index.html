@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luna — Gestão da Qualidade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bordo:#6B1E2E; --bordo-dark:#4A1220; --bordo-light:#8B3345;
+    --creme:#F5EFE4; --creme-dark:#EDE4D4; --marrom:#A0785A;
+    --marrom-light:#C4A882; --marrom-dark:#7A5840;
+    --text:#2C1810; --text-light:#6B4F3A; --white:#FDFAF6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{overflow-x:hidden;max-width:100vw}
+  body{font-family:'Jost',sans-serif;background:var(--creme);color:var(--text);min-height:100vh}
+  a{color:inherit}
+
+  #carregandoOverlay{position:fixed;inset:0;z-index:99999;background:linear-gradient(145deg,#4A1220 0%,#2C0A14 60%,#1A0008 100%);display:flex;align-items:center;justify-content:center;color:#C4A882;font-size:.85rem;letter-spacing:.1em;text-transform:uppercase;text-align:center;padding:20px}
+
+  #appRoot{display:none}
+  header{background:var(--bordo);color:var(--creme);padding:14px 26px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:0 2px 14px rgba(74,18,32,.25)}
+  .brand{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:1.4rem}
+  .brand-sub{font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--marrom-light);margin-top:-2px}
+  header .spacer{flex:1}
+  header select{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:var(--creme);padding:8px 12px;border-radius:6px;font-family:'Jost',sans-serif;font-size:.82rem}
+  header select option{color:var(--text)}
+  .hbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:var(--creme);padding:8px 14px;border-radius:6px;cursor:pointer;font-size:.78rem;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
+  .hbtn:hover{background:rgba(255,255,255,.22)}
+
+  nav.tabs{display:flex;gap:2px;background:var(--white);border-bottom:1px solid var(--creme-dark);padding:0 26px;overflow-x:auto}
+  .tab{padding:14px 16px;font-size:.8rem;font-weight:500;color:var(--text-light);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+  .tab.active{color:var(--bordo);border-bottom-color:var(--bordo);font-weight:600}
+
+  main{max-width:1180px;margin:0 auto;padding:28px 26px 60px}
+  .card{background:var(--white);border:1px solid var(--creme-dark);border-radius:12px;padding:22px;margin-bottom:18px}
+  .card h2{font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--bordo-dark);margin-bottom:14px}
+  .card h3{font-family:'Cormorant Garamond',serif;font-size:1.05rem;color:var(--bordo-dark);margin:18px 0 10px}
+  .card p.hint{font-size:.82rem;color:var(--text-light);margin-bottom:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);font-weight:500}
+  .inp,select.inp,textarea.inp{padding:9px 12px;border:1.5px solid var(--creme-dark);border-radius:7px;font-family:'Jost',sans-serif;font-size:.85rem;color:var(--text);background:var(--white)}
+  .inp:focus{outline:none;border-color:var(--marrom)}
+  .btn{background:var(--bordo);color:var(--creme);border:none;padding:10px 18px;border-radius:7px;font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;transition:background .15s}
+  .btn:hover{background:var(--bordo-dark)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn-outline{background:none;border:1.5px solid var(--bordo);color:var(--bordo)}
+  .btn-outline:hover{background:var(--bordo);color:var(--creme)}
+  .btn-danger{background:none;border:none;color:#B43C3C;cursor:pointer;font-size:.85rem}
+  .btn-sm{padding:6px 12px;font-size:.72rem}
+
+  .table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;min-width:560px;border-collapse:collapse;font-size:.82rem}
+  th{text-align:left;padding:9px 10px;background:var(--creme);color:var(--text-light);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em}
+  td{padding:9px 10px;border-top:1px solid var(--creme-dark);vertical-align:top}
+  tr.inativo td{color:var(--text-light);opacity:.6}
+  tr.total-row td{font-weight:600;border-top:2px solid var(--creme-dark)}
+  tr:hover td{background:#faf8f5}
+
+  .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.68rem;font-weight:600;white-space:nowrap}
+  .badge-ok{background:#E8F8F0;color:#27AE60}
+  .badge-naook{background:#FDEDEC;color:#B43C3C}
+  .badge-na{background:var(--creme);color:var(--text-light)}
+  .badge-pendente{background:#FEF6E7;color:#B8860B}
+  .badge-andamento{background:#EAF2FB;color:#2E6DA4}
+  .badge-concluido{background:#E8F8F0;color:#27AE60}
+  .badge-atrasado{background:#FDEDEC;color:#B43C3C}
+
+  .empty{text-align:center;padding:40px;color:var(--text-light);font-size:.85rem}
+  .loading{text-align:center;padding:30px;color:var(--text-light)}
+
+  .stat-box{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:18px}
+  .stat{background:var(--creme);border-radius:10px;padding:18px 22px;min-width:160px}
+  .stat .num{font-family:'Cormorant Garamond',serif;font-size:2rem;color:var(--bordo-dark);font-weight:600;line-height:1}
+  .stat .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);margin-top:6px}
+
+  .check-item{border:1px solid var(--creme-dark);border-radius:9px;padding:12px 14px;margin-bottom:8px}
+  .check-item.status-ok{border-left:4px solid #27AE60}
+  .check-item.status-naook{border-left:4px solid #B43C3C}
+  .check-item.status-na{border-left:4px solid var(--marrom-light)}
+  .check-item .texto{font-size:.85rem;margin-bottom:8px}
+  .status-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .status-btn{border:1.5px solid var(--creme-dark);background:var(--white);padding:6px 14px;border-radius:20px;font-size:.72rem;font-weight:600;cursor:pointer;color:var(--text-light)}
+  .status-btn.sel-ok{background:#27AE60;border-color:#27AE60;color:#fff}
+  .status-btn.sel-naook{background:#B43C3C;border-color:#B43C3C;color:#fff}
+  .status-btn.sel-na{background:var(--marrom-light);border-color:var(--marrom-light);color:#fff}
+  .categoria-titulo{font-family:'Cormorant Garamond',serif;font-size:1.05rem;color:var(--bordo-dark);margin:18px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--creme-dark)}
+  .categoria-titulo:first-child{margin-top:0}
+
+  .score-ring{display:flex;align-items:center;gap:16px}
+  .score-num{font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:600;color:var(--bordo-dark)}
+
+  .topico{border-left:3px solid var(--bordo);background:var(--creme);padding:8px 12px;border-radius:0 8px 8px 0;margin-bottom:8px;font-size:.82rem}
+  .topico .meta{font-size:.68rem;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-top:4px}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(44,24,16,.5);z-index:500;align-items:center;justify-content:center;padding:20px}
+  .modal-overlay.show{display:flex}
+  .modal{width:100%;max-width:520px;max-height:88vh;overflow:auto;background:var(--white);border-radius:14px;padding:26px}
+  .modal h3{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:var(--bordo-dark);margin-bottom:14px}
+  .modal-actions{display:flex;gap:10px;margin-top:16px}
+  .modal-close{background:none;border:none;color:var(--marrom-dark);text-decoration:underline;cursor:pointer;font-size:.78rem;display:block;margin:14px auto 0}
+  .msg{font-size:.78rem;margin-top:8px;display:none}
+  .msg.show{display:block}
+  .msg.err{color:#B43C3C}
+  .msg.ok{color:#27AE60}
+
+  canvas{max-width:100%}
+
+  @media (max-width:600px){
+    header{padding:12px 16px}
+    nav.tabs{padding:0 16px}
+    main{padding:20px 16px 50px}
+    .card{padding:16px}
+    .score-num{font-size:2rem}
+  }
+</style>
+</head>
+<body>
+
+<div id="carregandoOverlay">Carregando…</div>
+
+<div id="appRoot">
+<header>
+  <div>
+    <div class="brand">LUNA <span style="font-size:.7em;font-weight:400">Qualidade</span></div>
+    <div class="brand-sub">Gestão da Qualidade</div>
+  </div>
+  <div class="field" id="seletorLojaWrap" style="min-width:220px;display:none">
+    <label style="color:var(--marrom-light)">Loja</label>
+    <select id="seletorLoja" class="inp" onchange="onTrocarLoja()"></select>
+  </div>
+  <div class="spacer"></div>
+  <a href="https://thiagodlborges.github.io/Sistema-Luna/" class="hbtn">← Sistema Luna</a>
+  <button class="hbtn" onclick="sairApp()">Sair</button>
+</header>
+
+<nav class="tabs">
+  <div class="tab" id="tabChecklist" data-tab="checklist" onclick="mudarTab('checklist')" style="display:none">📋 Checklist Diário</div>
+  <div class="tab" id="tabDesempenho" data-tab="desempenho" onclick="mudarTab('desempenho')" style="display:none">📈 Meu Desempenho</div>
+  <div class="tab" id="tabAvaliacao" data-tab="avaliacao" onclick="mudarTab('avaliacao')" style="display:none">🔍 Avaliação Externa</div>
+  <div class="tab" id="tabPlanos" data-tab="planos" onclick="mudarTab('planos')" style="display:none">✅ Planos de Ação</div>
+  <div class="tab" id="tabDashboard" data-tab="dashboard" onclick="mudarTab('dashboard')" style="display:none">🏆 Dashboard Gerencial</div>
+  <div class="tab" id="tabConfig" data-tab="config" onclick="mudarTab('config')" style="display:none">⚙ Configurações</div>
+</nav>
+
+<main id="mainContent"><div class="loading">Carregando…</div></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidWh3cGNwZGNuYWhlYXl3bWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNjU5MzksImV4cCI6MjA5MTg0MTkzOX0.Mg4PVg96ZiV3C2Rn0GLQU9c7ui_41OlU6Ldqn5jcvyY';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const PORTAL_URL = 'https://thiagodlborges.github.io/Sistema-Luna/';
+const $ = id => document.getElementById(id);
+
+const TODAS_LOJAS = ['Esplanada','Cianê','Tucuruvi','Indaiatuba','Jundiaí','Praça da Moça - Diadema','Buriti Mogi Guaçu','SP Market','Iguatemi Campinas','Shopping Itaquera','Atrium'];
+
+let meuPerfil = null;
+let minhasLojas = [];
+let lojaAtual = null;
+let currentTab = null;
+let souMaster = false;
+let souBackoffice = false;
+let souCoordenador = false;
+let souGerencial = false;
+let temPapelDeLoja = false;
+
+let checklistItensCache = null;
+let avaliacaoItensCache = null;
+
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtData(d){ return d ? new Date(d+'T12:00').toLocaleDateString('pt-BR') : '—'; }
+function fmtDataHora(dt){ return dt ? new Date(dt).toLocaleString('pt-BR') : '—'; }
+function fmtPct(v){ return (v==null?'—':Number(v).toFixed(1)+'%'); }
+function hojeISO(){ return new Date().toISOString().slice(0,10); }
+function fecharModal(id){ $(id).classList.remove('show'); }
+function showMsg(id, txt, tipo){ const m=$(id); if(!m) return; m.textContent=txt; m.className='msg'+(txt?' show '+(tipo||''):''); }
+
+async function sairApp(){
+  await sb.auth.signOut();
+  window.location.href = PORTAL_URL;
+}
+
+async function verificarAcessoEIniciar(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = PORTAL_URL; return; }
+
+  const { data: ok, error } = await sb.rpc('tem_acesso', { p_slug: 'qualidade' });
+  if (error || !ok) { await sb.auth.signOut(); window.location.href = PORTAL_URL; return; }
+
+  const { data: perfil } = await sb.from('perfis').select('*').eq('id', session.user.id).single();
+  if (!perfil) { window.location.href = PORTAL_URL; return; }
+  meuPerfil = perfil;
+
+  souMaster = perfil.tipo === 'master';
+  souBackoffice = souMaster || perfil.qualidade_backoffice === true;
+  souCoordenador = perfil.qualidade_coordenador === true;
+  souGerencial = souMaster || souBackoffice || souCoordenador;
+  temPapelDeLoja = ['loja','master_loja','master'].includes(perfil.tipo);
+
+  if (perfil.tipo === 'master' || perfil.tipo === 'master_loja') minhasLojas = [...TODAS_LOJAS];
+  else if (perfil.lojas && perfil.lojas.length) minhasLojas = perfil.lojas;
+  else if (perfil.loja) minhasLojas = [perfil.loja];
+  else minhasLojas = [];
+
+  if (temPapelDeLoja && minhasLojas.length) {
+    const sel = $('seletorLoja');
+    sel.innerHTML = minhasLojas.map(l => '<option value="'+esc(l)+'">'+esc(l)+'</option>').join('');
+    lojaAtual = minhasLojas[0];
+    $('seletorLojaWrap').style.display = '';
+  } else {
+    temPapelDeLoja = false;
+  }
+
+  if (temPapelDeLoja) {
+    $('tabChecklist').style.display = '';
+    $('tabDesempenho').style.display = '';
+  }
+  if (temPapelDeLoja || souGerencial) {
+    $('tabAvaliacao').style.display = '';
+    $('tabPlanos').style.display = '';
+  }
+  if (souGerencial) $('tabDashboard').style.display = '';
+  if (souBackoffice) $('tabConfig').style.display = '';
+
+  currentTab = temPapelDeLoja ? 'checklist' : (souGerencial ? 'dashboard' : 'avaliacao');
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===currentTab));
+
+  document.getElementById('appRoot').style.display = 'block';
+  document.getElementById('carregandoOverlay').remove();
+  renderTab();
+}
+
+function onTrocarLoja(){ lojaAtual = $('seletorLoja').value; renderTab(); }
+
+function mudarTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tab));
+  renderTab();
+}
+
+function renderTab(){
+  if(currentTab==='checklist') renderChecklist();
+  else if(currentTab==='desempenho') renderDesempenho();
+  else if(currentTab==='avaliacao') renderAvaliacao();
+  else if(currentTab==='planos') renderPlanos();
+  else if(currentTab==='dashboard') renderDashboard();
+  else if(currentTab==='config') renderConfig();
+}
+
+async function carregarChecklistItens(){
+  if(checklistItensCache) return checklistItensCache;
+  const { data, error } = await sb.from('qualidade_checklist_itens').select('*').eq('ativo', true).order('ordem');
+  if(error) throw error;
+  checklistItensCache = data || [];
+  return checklistItensCache;
+}
+
+async function carregarAvaliacaoItens(){
+  if(avaliacaoItensCache) return avaliacaoItensCache;
+  const { data, error } = await sb.from('qualidade_avaliacao_itens').select('*').eq('ativo', true).order('ordem');
+  if(error) throw error;
+  avaliacaoItensCache = data || [];
+  return avaliacaoItensCache;
+}
+
+// ══════════════════════════════════════════════════════════
+// CHECKLIST DIÁRIO
+// ══════════════════════════════════════════════════════════
+let checklistRespostasState = {};   // item_id -> {status, observacao, responsavel_nome}
+let checklistRegistroIdAtual = null;
+let checklistModoEdicao = false;
+
+async function renderChecklist(){
+  const hoje = hojeISO();
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+        <h2 style="margin:0">Checklist Diário — ${esc(lojaAtual)}</h2>
+        <div class="field"><label>Data</label><input class="inp" type="date" id="checklistData" value="${hoje}" max="${hoje}" onchange="carregarChecklistParaData()"></div>
+      </div>
+      <div id="checklistConteudo" class="loading">Carregando…</div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Últimos registros</h3>
+      <div id="checklistUltimos" class="loading">Carregando…</div>
+    </div>`;
+  await Promise.all([carregarChecklistParaData(), carregarUltimosChecklists()]);
+}
+
+async function carregarChecklistParaData(){
+  const data = $('checklistData').value;
+  const el = $('checklistConteudo');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  checklistModoEdicao = false;
+
+  let itens;
+  try { itens = await carregarChecklistItens(); }
+  catch(e){ el.innerHTML = '<div class="empty">Erro ao carregar itens: '+esc(e.message)+'</div>'; return; }
+
+  const { data: registro, error: eReg } = await sb.from('qualidade_checklist_registros')
+    .select('*').eq('loja', lojaAtual).eq('data_checklist', data).maybeSingle();
+  if(eReg){ el.innerHTML = '<div class="empty">Erro: '+esc(eReg.message)+'</div>'; return; }
+
+  if(registro){
+    const { data: respostas } = await sb.from('qualidade_checklist_respostas').select('*').eq('registro_id', registro.id);
+    checklistRegistroIdAtual = registro.id;
+    renderChecklistLeitura(registro, respostas||[]);
+  } else {
+    checklistRegistroIdAtual = null;
+    checklistRespostasState = {};
+    itens.forEach(it => { checklistRespostasState[it.id] = {status:null, observacao:'', responsavel_nome:''}; });
+    checklistModoEdicao = true;
+    renderChecklistFormulario(itens);
+  }
+}
+
+function renderChecklistLeitura(registro, respostas){
+  const totalItens = registro.itens_ok + registro.itens_nao_ok + registro.itens_na;
+  const pct = (registro.itens_ok+registro.itens_nao_ok) > 0
+    ? (registro.itens_ok/(registro.itens_ok+registro.itens_nao_ok)*100) : null;
+  const porCategoria = {};
+  respostas.forEach(r => { (porCategoria[r.categoria] = porCategoria[r.categoria]||[]).push(r); });
+
+  $('checklistConteudo').innerHTML = `
+    <div class="stat-box">
+      <div class="stat"><div class="num">${fmtPct(pct)}</div><div class="lbl">Conformidade</div></div>
+      <div class="stat"><div class="num">${registro.itens_ok}</div><div class="lbl">OK</div></div>
+      <div class="stat"><div class="num">${registro.itens_nao_ok}</div><div class="lbl">Não OK</div></div>
+      <div class="stat"><div class="num">${registro.itens_na}</div><div class="lbl">N/A</div></div>
+    </div>
+    <p class="hint">Respondido por ${esc(registro.respondido_por_nome)} em ${fmtDataHora(registro.criado_em)}</p>
+    ${Object.keys(porCategoria).map(cat => `
+      <div class="categoria-titulo">${esc(cat)}</div>
+      ${porCategoria[cat].map(r => `
+        <div class="check-item status-${r.status==='OK'?'ok':r.status==='Não OK'?'naook':'na'}">
+          <div class="texto">${esc(r.item_texto)}</div>
+          <span class="badge badge-${r.status==='OK'?'ok':r.status==='Não OK'?'naook':'na'}">${esc(r.status)}</span>
+          ${r.observacao ? '<p style="font-size:.78rem;margin-top:6px;color:var(--text-light)">💬 '+esc(r.observacao)+'</p>' : ''}
+        </div>`).join('')}
+    `).join('')}
+    <button class="btn btn-outline" style="margin-top:10px" onclick="reabrirChecklistParaEdicao()">Editar este checklist</button>`;
+}
+
+async function reabrirChecklistParaEdicao(){
+  const el = $('checklistConteudo');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const itens = await carregarChecklistItens();
+  const { data: respostas } = await sb.from('qualidade_checklist_respostas').select('*').eq('registro_id', checklistRegistroIdAtual);
+  checklistRespostasState = {};
+  itens.forEach(it => {
+    const r = (respostas||[]).find(x => x.item_id === it.id);
+    checklistRespostasState[it.id] = r ? {status:r.status, observacao:r.observacao||'', responsavel_nome:r.responsavel_nome||''}
+                                       : {status:null, observacao:'', responsavel_nome:''};
+  });
+  checklistModoEdicao = true;
+  renderChecklistFormulario(itens);
+}
+
+function renderChecklistFormulario(itens){
+  const porCategoria = {};
+  itens.forEach(it => { (porCategoria[it.categoria] = porCategoria[it.categoria]||[]).push(it); });
+
+  $('checklistConteudo').innerHTML = `
+    <p class="hint">Clique em OK / Não OK / N/A pra cada item. Itens "Não OK" pedem um plano de ação ou observação.</p>
+    ${Object.keys(porCategoria).map(cat => `
+      <div class="categoria-titulo">${esc(cat)}</div>
+      ${porCategoria[cat].map(it => renderChecklistItemForm(it)).join('')}
+    `).join('')}
+    <div class="msg" id="checklistMsg"></div>
+    <button class="btn" id="btnSalvarChecklist" onclick="salvarChecklistDiario()">💾 Salvar Checklist</button>`;
+}
+
+function renderChecklistItemForm(it){
+  const st = checklistRespostasState[it.id] || {status:null, observacao:''};
+  const cls = st.status==='OK'?'status-ok':st.status==='Não OK'?'status-naook':st.status==='N/A'?'status-na':'';
+  return `
+    <div class="check-item ${cls}" id="checkitem-${it.id}">
+      <div class="texto">${esc(it.item)}</div>
+      <div class="status-btns">
+        <button type="button" class="status-btn ${st.status==='OK'?'sel-ok':''}" onclick="marcarStatusChecklist('${it.id}','OK')">✓ OK</button>
+        <button type="button" class="status-btn ${st.status==='Não OK'?'sel-naook':''}" onclick="marcarStatusChecklist('${it.id}','Não OK')">✕ Não OK</button>
+        <button type="button" class="status-btn ${st.status==='N/A'?'sel-na':''}" onclick="marcarStatusChecklist('${it.id}','N/A')">— N/A</button>
+      </div>
+      ${st.status==='Não OK' ? `<textarea class="inp" style="margin-top:8px;width:100%" rows="2" placeholder="Plano de ação / observação..." onchange="atualizarObsChecklist('${it.id}',this.value)">${esc(st.observacao)}</textarea>` : ''}
+    </div>`;
+}
+
+function marcarStatusChecklist(itemId, status){
+  if(!checklistRespostasState[itemId]) checklistRespostasState[itemId] = {status:null, observacao:''};
+  checklistRespostasState[itemId].status = status;
+  const el = document.getElementById('checkitem-'+itemId);
+  if(el){
+    const itens = checklistItensCache || [];
+    const it = itens.find(x=>x.id===itemId);
+    if(it) el.outerHTML = renderChecklistItemForm(it);
+  }
+}
+
+function atualizarObsChecklist(itemId, valor){
+  if(checklistRespostasState[itemId]) checklistRespostasState[itemId].observacao = valor;
+}
+
+async function salvarChecklistDiario(){
+  const itens = checklistItensCache || [];
+  const faltando = itens.filter(it => !checklistRespostasState[it.id] || !checklistRespostasState[it.id].status);
+  if(faltando.length){
+    showMsg('checklistMsg', 'Faltam '+faltando.length+' item(ns) sem status marcado.', 'err');
+    return;
+  }
+  const payload = itens.map(it => ({
+    item_id: it.id,
+    item_texto: it.item,
+    categoria: it.categoria,
+    status: checklistRespostasState[it.id].status,
+    observacao: checklistRespostasState[it.id].observacao || null,
+    responsavel_nome: null,
+  }));
+
+  const btn = $('btnSalvarChecklist');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  const { error } = await sb.rpc('registrar_checklist_diario', {
+    p_loja: lojaAtual,
+    p_data: $('checklistData').value,
+    p_respondido_por_nome: meuPerfil.nome,
+    p_respostas: payload,
+  });
+  if(btn){ btn.disabled = false; btn.textContent = '💾 Salvar Checklist'; }
+
+  if(error){ showMsg('checklistMsg', 'Erro: '+error.message, 'err'); return; }
+  showMsg('checklistMsg', 'Checklist salvo!', 'ok');
+  setTimeout(() => carregarChecklistParaData(), 900);
+}
+
+async function carregarUltimosChecklists(){
+  const el = $('checklistUltimos');
+  const { data, error } = await sb.from('qualidade_checklist_registros').select('*')
+    .eq('loja', lojaAtual).order('data_checklist', {ascending:false}).limit(10);
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhum checklist registrado ainda.</div>'; return; }
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Data</th><th>OK</th><th>Não OK</th><th>N/A</th><th>Conformidade</th><th>Respondido por</th></tr></thead><tbody>'+
+    data.map(r => {
+      const pct = (r.itens_ok+r.itens_nao_ok) > 0 ? (r.itens_ok/(r.itens_ok+r.itens_nao_ok)*100) : null;
+      return `<tr style="cursor:pointer" onclick="irParaDataChecklist('${r.data_checklist}')">
+        <td>${fmtData(r.data_checklist)}</td><td>${r.itens_ok}</td><td>${r.itens_nao_ok}</td><td>${r.itens_na}</td>
+        <td>${fmtPct(pct)}</td><td>${esc(r.respondido_por_nome)}</td></tr>`;
+    }).join('')+
+    '</tbody></table></div>';
+}
+
+function irParaDataChecklist(data){
+  $('checklistData').value = data;
+  carregarChecklistParaData();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ══════════════════════════════════════════════════════════
+// MEU DESEMPENHO (gráfico de evolução)
+// ══════════════════════════════════════════════════════════
+let chartChecklistRef = null;
+let chartAvaliacaoRef = null;
+
+async function renderDesempenho(){
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <h2>Evolução — ${esc(lojaAtual)}</h2>
+      <h3>Conformidade do Checklist Diário (últimos 30 registros)</h3>
+      <canvas id="chartChecklist" height="90"></canvas>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Pontuação nas Avaliações Externas</h3>
+      <canvas id="chartAvaliacao" height="90"></canvas>
+    </div>`;
+
+  const [regR, avalR] = await Promise.all([
+    sb.from('qualidade_checklist_registros').select('*').eq('loja', lojaAtual).order('data_checklist', {ascending:false}).limit(30),
+    sb.from('qualidade_avaliacoes').select('*').eq('loja', lojaAtual).order('data_avaliacao', {ascending:true}),
+  ]);
+
+  const regs = (regR.data||[]).slice().reverse();
+  if(chartChecklistRef) chartChecklistRef.destroy();
+  if(regs.length){
+    chartChecklistRef = new Chart($('chartChecklist'), {
+      type: 'line',
+      data: {
+        labels: regs.map(r => fmtData(r.data_checklist)),
+        datasets: [{
+          label: 'Conformidade (%)',
+          data: regs.map(r => (r.itens_ok+r.itens_nao_ok)>0 ? Math.round(r.itens_ok/(r.itens_ok+r.itens_nao_ok)*1000)/10 : null),
+          borderColor: '#6B1E2E', backgroundColor: 'rgba(107,30,46,.12)', fill:true, tension:.25,
+        }],
+      },
+      options: { scales: { y: { min:0, max:100 } }, plugins:{ legend:{display:false} } },
+    });
+  } else { $('chartChecklist').replaceWith('<div class="empty">Nenhum checklist registrado ainda.</div>'); }
+
+  const avals = avalR.data||[];
+  if(chartAvaliacaoRef) chartAvaliacaoRef.destroy();
+  if(avals.length){
+    chartAvaliacaoRef = new Chart($('chartAvaliacao'), {
+      type: 'line',
+      data: {
+        labels: avals.map(a => fmtData(a.data_avaliacao)),
+        datasets: [{
+          label: 'Pontuação (%)',
+          data: avals.map(a => Number(a.pontuacao_pct)),
+          borderColor: '#A0785A', backgroundColor: 'rgba(160,120,90,.15)', fill:true, tension:.25,
+        }],
+      },
+      options: { scales: { y: { min:0, max:100 } }, plugins:{ legend:{display:false} } },
+    });
+  } else { $('chartAvaliacao').replaceWith('<div class="empty">Nenhuma avaliação externa registrada ainda pra esta loja.</div>'); }
+}
+
+// ══════════════════════════════════════════════════════════
+// AVALIAÇÃO EXTERNA (setor de qualidade)
+// ══════════════════════════════════════════════════════════
+let avaliacaoRespostasState = {};
+let avaliacaoLojaSelecionada = null;
+
+async function renderAvaliacao(){
+  avaliacaoLojaSelecionada = souBackoffice ? (TODAS_LOJAS[0]) : lojaAtual;
+  const novaBtn = souBackoffice ? '<button class="btn" onclick="abrirNovaAvaliacao()">+ Nova Avaliação Externa</button>' : '';
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+        <h2 style="margin:0">Avaliações Externas</h2>
+        ${novaBtn}
+      </div>
+      <div id="avaliacaoConteudo"></div>
+    </div>`;
+  await renderHistoricoAvaliacoes();
+}
+
+async function renderHistoricoAvaliacoes(){
+  const el = $('avaliacaoConteudo');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  let q = sb.from('qualidade_avaliacoes').select('*').order('data_avaliacao', {ascending:false});
+  if(!souGerencial) q = q.eq('loja', lojaAtual);
+  const { data, error } = await q;
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhuma avaliação externa registrada ainda.</div>'; return; }
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr>'+(souGerencial?'<th>Loja</th>':'')+'<th>Data</th><th>Avaliado por</th><th>Conformes</th><th>Não Conformes</th><th>Pontuação</th><th></th></tr></thead><tbody>'+
+    data.map(a => `<tr>
+        ${souGerencial ? '<td>'+esc(a.loja)+'</td>' : ''}
+        <td>${fmtData(a.data_avaliacao)}</td>
+        <td>${esc(a.avaliado_por_nome)}</td>
+        <td>${a.itens_conformes}</td>
+        <td>${a.itens_nao_conformes}</td>
+        <td><strong>${fmtPct(a.pontuacao_pct)}</strong></td>
+        <td><button class="btn-outline btn btn-sm" onclick="verDetalheAvaliacao('${a.id}')">Ver</button></td>
+      </tr>`).join('')+
+    '</tbody></table></div>';
+}
+
+async function verDetalheAvaliacao(id){
+  const el = $('avaliacaoConteudo');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const [{ data: aval }, { data: respostas }] = await Promise.all([
+    sb.from('qualidade_avaliacoes').select('*').eq('id', id).single(),
+    sb.from('qualidade_avaliacao_respostas').select('*').eq('avaliacao_id', id),
+  ]);
+  const porSetor = {};
+  (respostas||[]).forEach(r => { (porSetor[r.setor]=porSetor[r.setor]||[]).push(r); });
+
+  el.innerHTML = `
+    <button class="btn-outline btn btn-sm" onclick="renderHistoricoAvaliacoes()">← Voltar</button>
+    <div class="stat-box" style="margin-top:14px">
+      <div class="stat"><div class="num">${fmtPct(aval.pontuacao_pct)}</div><div class="lbl">Pontuação Geral</div></div>
+      <div class="stat"><div class="num">${aval.pontos_obtidos}/${aval.pontos_maximos}</div><div class="lbl">Pontos</div></div>
+      <div class="stat"><div class="num">${aval.itens_conformes}</div><div class="lbl">Conformes</div></div>
+      <div class="stat"><div class="num">${aval.itens_nao_conformes}</div><div class="lbl">Não Conformes</div></div>
+    </div>
+    <p class="hint">${esc(aval.loja)} — avaliado por ${esc(aval.avaliado_por_nome)} em ${fmtData(aval.data_avaliacao)}</p>
+    ${Object.keys(porSetor).map(setor => `
+      <div class="categoria-titulo">${esc(setor)}</div>
+      ${porSetor[setor].map(r => `
+        <div class="check-item status-${r.status==='Sim'?'ok':r.status==='Não'?'naook':'na'}">
+          <div class="texto">${esc(r.item_texto)} <span style="color:var(--text-light);font-size:.75rem">(${r.pontos_max} pts)</span></div>
+          <span class="badge badge-${r.status==='Sim'?'ok':r.status==='Não'?'naook':'na'}">${esc(r.status)}${r.status!=='N/A' ? ' — '+r.pontos_obtidos+' pts' : ''}</span>
+          ${r.observacao ? '<p style="font-size:.78rem;margin-top:6px;color:var(--text-light)">💬 '+esc(r.observacao)+'</p>' : ''}
+        </div>`).join('')}
+    `).join('')}`;
+}
+
+async function abrirNovaAvaliacao(){
+  const el = $('avaliacaoConteudo');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  let itens;
+  try { itens = await carregarAvaliacaoItens(); }
+  catch(e){ el.innerHTML = '<div class="empty">Erro: '+esc(e.message)+'</div>'; return; }
+
+  avaliacaoRespostasState = {};
+  itens.forEach(it => { avaliacaoRespostasState[it.id] = {status:null, observacao:''}; });
+
+  const porSetor = {};
+  itens.forEach(it => { (porSetor[it.setor]=porSetor[it.setor]||[]).push(it); });
+
+  el.innerHTML = `
+    <div class="row">
+      <div class="field"><label>Loja avaliada</label>
+        <select class="inp" id="avalLoja" onchange="avaliacaoLojaSelecionada=this.value">
+          ${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}
+        </select>
+      </div>
+      <div class="field"><label>Data da auditoria</label><input class="inp" type="date" id="avalData" value="${hojeISO()}" max="${hojeISO()}"></div>
+    </div>
+    <p class="hint">Toda resposta "Não" gera automaticamente um rascunho de plano de ação (defina responsável e prazo depois na aba Planos de Ação).</p>
+    ${Object.keys(porSetor).map(setor => `
+      <div class="categoria-titulo">${esc(setor)}</div>
+      ${porSetor[setor].map(it => renderAvaliacaoItemForm(it)).join('')}
+    `).join('')}
+    <div class="msg" id="avaliacaoMsg"></div>
+    <div class="modal-actions">
+      <button class="btn" id="btnSalvarAvaliacao" onclick="salvarAvaliacaoExterna()">💾 Salvar Avaliação</button>
+      <button class="btn-outline btn" onclick="renderHistoricoAvaliacoes()">Cancelar</button>
+    </div>`;
+}
+
+function renderAvaliacaoItemForm(it){
+  const st = avaliacaoRespostasState[it.id] || {status:null, observacao:''};
+  const cls = st.status==='Sim'?'status-ok':st.status==='Não'?'status-naook':st.status==='N/A'?'status-na':'';
+  return `
+    <div class="check-item ${cls}" id="avalitem-${it.id}">
+      <div class="texto">${esc(it.item)} <span style="color:var(--text-light);font-size:.75rem">(${it.pontos_max} pts)</span></div>
+      <div class="status-btns">
+        <button type="button" class="status-btn ${st.status==='Sim'?'sel-ok':''}" onclick="marcarStatusAvaliacao('${it.id}','Sim')">✓ Sim</button>
+        <button type="button" class="status-btn ${st.status==='Não'?'sel-naook':''}" onclick="marcarStatusAvaliacao('${it.id}','Não')">✕ Não</button>
+        <button type="button" class="status-btn ${st.status==='N/A'?'sel-na':''}" onclick="marcarStatusAvaliacao('${it.id}','N/A')">— N/A</button>
+      </div>
+      ${st.status==='Não' ? `<textarea class="inp" style="margin-top:8px;width:100%" rows="2" placeholder="Observação (opcional)..." onchange="atualizarObsAvaliacao('${it.id}',this.value)">${esc(st.observacao)}</textarea>` : ''}
+    </div>`;
+}
+
+function marcarStatusAvaliacao(itemId, status){
+  if(!avaliacaoRespostasState[itemId]) avaliacaoRespostasState[itemId] = {status:null, observacao:''};
+  avaliacaoRespostasState[itemId].status = status;
+  const el = document.getElementById('avalitem-'+itemId);
+  if(el){
+    const it = (avaliacaoItensCache||[]).find(x=>x.id===itemId);
+    if(it) el.outerHTML = renderAvaliacaoItemForm(it);
+  }
+}
+
+function atualizarObsAvaliacao(itemId, valor){
+  if(avaliacaoRespostasState[itemId]) avaliacaoRespostasState[itemId].observacao = valor;
+}
+
+async function salvarAvaliacaoExterna(){
+  const itens = avaliacaoItensCache || [];
+  const faltando = itens.filter(it => !avaliacaoRespostasState[it.id] || !avaliacaoRespostasState[it.id].status);
+  if(faltando.length){ showMsg('avaliacaoMsg', 'Faltam '+faltando.length+' item(ns) sem status.', 'err'); return; }
+
+  const payload = itens.map(it => ({
+    item_id: it.id, item_texto: it.item, setor: it.setor, pontos_max: it.pontos_max,
+    status: avaliacaoRespostasState[it.id].status,
+    observacao: avaliacaoRespostasState[it.id].observacao || null,
+  }));
+
+  const btn = $('btnSalvarAvaliacao');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  const { error } = await sb.rpc('registrar_avaliacao_externa', {
+    p_loja: $('avalLoja').value,
+    p_data: $('avalData').value,
+    p_avaliado_por_nome: meuPerfil.nome,
+    p_respostas: payload,
+  });
+  if(btn){ btn.disabled = false; btn.textContent = '💾 Salvar Avaliação'; }
+
+  if(error){ showMsg('avaliacaoMsg', 'Erro: '+error.message, 'err'); return; }
+  await renderHistoricoAvaliacoes();
+}
+
+// ══════════════════════════════════════════════════════════
+// PLANOS DE AÇÃO
+// ══════════════════════════════════════════════════════════
+const STATUS_LABEL = {pendente:'Pendente', em_andamento:'Em Andamento', concluido:'Concluído'};
+
+function statusPlanoBadge(p){
+  const atrasado = p.status !== 'concluido' && p.prazo_execucao < hojeISO();
+  if(atrasado) return '<span class="badge badge-atrasado">Atrasado</span>';
+  const cls = p.status==='concluido'?'concluido':p.status==='em_andamento'?'andamento':'pendente';
+  return '<span class="badge badge-'+cls+'">'+STATUS_LABEL[p.status]+'</span>';
+}
+
+async function renderPlanos(){
+  const novoBtn = souGerencial ? '<button class="btn" onclick="abrirNovoPlano()">+ Novo Plano</button>' : '';
+  const filtroLoja = souGerencial ? `
+    <div class="field"><label>Loja</label><select class="inp" id="planoFiltroLoja" onchange="carregarPlanos()">
+      <option value="">Todas</option>${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}
+    </select></div>` : '';
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <h2 style="margin:0">Planos de Ação</h2>
+        ${novoBtn}
+      </div>
+      <div class="row">
+        ${filtroLoja}
+        <div class="field"><label>Status</label><select class="inp" id="planoFiltroStatus" onchange="carregarPlanos()">
+          <option value="">Todos</option><option value="pendente">Pendente</option><option value="em_andamento">Em Andamento</option><option value="concluido">Concluído</option>
+        </select></div>
+      </div>
+      <div id="planosLista" class="loading">Carregando…</div>
+    </div>
+    <div class="modal-overlay" id="modalNovoPlano" onclick="if(event.target===this)fecharModal('modalNovoPlano')">
+      <div class="modal">
+        <h3>Novo Plano de Ação</h3>
+        <div class="field" style="margin-bottom:10px"><label>Loja</label><select class="inp" id="npLoja">${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}</select></div>
+        <div class="field" style="margin-bottom:10px"><label>Descrição</label><textarea class="inp" id="npDescricao" rows="2"></textarea></div>
+        <div class="row">
+          <div class="field"><label>Responsável</label><input class="inp" id="npResponsavel"></div>
+          <div class="field"><label>Prazo de execução</label><input class="inp" type="date" id="npPrazo" value="${hojeISO()}"></div>
+        </div>
+        <div class="msg" id="npMsg"></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="salvarNovoPlano()">Salvar</button>
+          <button class="btn-outline btn" onclick="fecharModal('modalNovoPlano')">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+  await carregarPlanos();
+}
+
+async function carregarPlanos(){
+  const el = $('planosLista');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  let q = sb.from('qualidade_planos_acao').select('*').order('prazo_execucao');
+  if(!souGerencial) q = q.eq('loja', lojaAtual);
+  else {
+    const fl = $('planoFiltroLoja') ? $('planoFiltroLoja').value : '';
+    if(fl) q = q.eq('loja', fl);
+  }
+  const fs = $('planoFiltroStatus') ? $('planoFiltroStatus').value : '';
+  if(fs) q = q.eq('status', fs);
+
+  const { data, error } = await q;
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhum plano de ação encontrado.</div>'; return; }
+
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr>'+
+    (souGerencial?'<th>Loja</th>':'')+
+    '<th>Descrição</th><th>Responsável</th><th>Prazo</th><th>Status</th><th>Origem</th>'+(souGerencial?'<th></th>':'')+
+    '</tr></thead><tbody>'+
+    data.map(p => `<tr>
+        ${souGerencial ? '<td>'+esc(p.loja)+'</td>' : ''}
+        <td>${esc(p.descricao)}</td>
+        <td>${esc(p.responsavel_nome||'—')}</td>
+        <td>${fmtData(p.prazo_execucao)}</td>
+        <td>${statusPlanoBadge(p)}</td>
+        <td><span class="badge badge-na">${p.origem}</span></td>
+        ${souGerencial ? '<td><button class="btn-outline btn btn-sm" onclick="editarPlano(\''+p.id+'\')">Editar</button></td>' : ''}
+      </tr>`).join('')+
+    '</tbody></table></div>';
+}
+
+async function abrirNovoPlano(){
+  showMsg('npMsg','','');
+  $('npDescricao').value=''; $('npResponsavel').value=''; $('npPrazo').value=hojeISO();
+  $('modalNovoPlano').classList.add('show');
+}
+
+async function salvarNovoPlano(){
+  const descricao = $('npDescricao').value.trim();
+  const prazo = $('npPrazo').value;
+  if(!descricao){ showMsg('npMsg','Descreva o plano de ação.','err'); return; }
+  if(!prazo){ showMsg('npMsg','Informe o prazo de execução.','err'); return; }
+  const { error } = await sb.from('qualidade_planos_acao').insert({
+    loja: $('npLoja').value, origem: 'manual', descricao,
+    responsavel_nome: $('npResponsavel').value.trim() || null,
+    prazo_execucao: prazo, criado_por: meuPerfil.id, criado_por_nome: meuPerfil.nome,
+  });
+  if(error){ showMsg('npMsg','Erro: '+error.message,'err'); return; }
+  fecharModal('modalNovoPlano');
+  carregarPlanos();
+}
+
+let planoEditandoId = null;
+
+async function editarPlano(id){
+  const { data: p } = await sb.from('qualidade_planos_acao').select('*').eq('id', id).single();
+  if(!p) return;
+  planoEditandoId = id;
+  if(!$('modalEditarPlano')){
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal-overlay" id="modalEditarPlano" onclick="if(event.target===this)fecharModal('modalEditarPlano')">
+        <div class="modal">
+          <h3>Editar Plano de Ação</h3>
+          <div class="field" style="margin-bottom:10px"><label>Descrição</label><textarea class="inp" id="epDescricao" rows="2"></textarea></div>
+          <div class="row">
+            <div class="field"><label>Responsável</label><input class="inp" id="epResponsavel"></div>
+            <div class="field"><label>Prazo de execução</label><input class="inp" type="date" id="epPrazo"></div>
+          </div>
+          <div class="field" style="margin-bottom:10px"><label>Status</label>
+            <select class="inp" id="epStatus">
+              <option value="pendente">Pendente</option><option value="em_andamento">Em Andamento</option><option value="concluido">Concluído</option>
+            </select>
+          </div>
+          <div class="msg" id="epMsg"></div>
+          <div class="modal-actions">
+            <button class="btn" onclick="salvarEdicaoPlano()">Salvar</button>
+            <button class="btn-danger" onclick="excluirPlano()">Excluir</button>
+            <button class="btn-outline btn" onclick="fecharModal('modalEditarPlano')">Cancelar</button>
+          </div>
+        </div>
+      </div>`);
+  }
+  $('epDescricao').value = p.descricao;
+  $('epResponsavel').value = p.responsavel_nome || '';
+  $('epPrazo').value = p.prazo_execucao;
+  $('epStatus').value = p.status;
+  showMsg('epMsg','','');
+  $('modalEditarPlano').classList.add('show');
+}
+
+async function salvarEdicaoPlano(){
+  const descricao = $('epDescricao').value.trim();
+  const prazo = $('epPrazo').value;
+  const status = $('epStatus').value;
+  if(!descricao){ showMsg('epMsg','Descreva o plano de ação.','err'); return; }
+  if(!prazo){ showMsg('epMsg','Informe o prazo de execução.','err'); return; }
+
+  const { data: atual } = await sb.from('qualidade_planos_acao').select('status').eq('id', planoEditandoId).single();
+  const payload = { descricao, prazo_execucao: prazo, status, responsavel_nome: $('epResponsavel').value.trim() || null };
+  if(status==='concluido' && atual && atual.status!=='concluido'){
+    payload.concluido_em = new Date().toISOString();
+    payload.concluido_por_nome = meuPerfil.nome;
+  }
+  const { error } = await sb.from('qualidade_planos_acao').update(payload).eq('id', planoEditandoId);
+  if(error){ showMsg('epMsg','Erro: '+error.message,'err'); return; }
+  fecharModal('modalEditarPlano');
+  carregarPlanos();
+}
+
+async function excluirPlano(){
+  if(!confirm('Excluir este plano de ação? Essa ação não pode ser desfeita.')) return;
+  const { error } = await sb.from('qualidade_planos_acao').delete().eq('id', planoEditandoId);
+  if(error){ alert('Erro: '+error.message); return; }
+  fecharModal('modalEditarPlano');
+  carregarPlanos();
+}
+
+// ══════════════════════════════════════════════════════════
+// DASHBOARD GERENCIAL (master / analista de qualidade / coordenador)
+// ══════════════════════════════════════════════════════════
+async function renderDashboard(){
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <h2>Notas de Todas as Operações</h2>
+      <div id="dashRanking" class="loading">Carregando…</div>
+    </div>
+    <div class="card">
+      <h2>Planos de Ação em Aberto</h2>
+      <div id="dashPlanos" class="loading">Carregando…</div>
+    </div>`;
+  await Promise.all([carregarDashboardRanking(), carregarDashboardPlanos()]);
+}
+
+async function carregarDashboardRanking(){
+  const el = $('dashRanking');
+  const seteDiasAtras = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+
+  const [avalR, checkR] = await Promise.all([
+    sb.from('qualidade_avaliacoes').select('*').order('data_avaliacao', {ascending:false}),
+    sb.from('qualidade_checklist_registros').select('*').gte('data_checklist', seteDiasAtras),
+  ]);
+
+  const ultimaAvalPorLoja = {};
+  (avalR.data||[]).forEach(a => { if(!ultimaAvalPorLoja[a.loja]) ultimaAvalPorLoja[a.loja] = a; });
+
+  const checklistPorLoja = {};
+  (checkR.data||[]).forEach(r => {
+    if(!checklistPorLoja[r.loja]) checklistPorLoja[r.loja] = {ok:0, naook:0};
+    checklistPorLoja[r.loja].ok += r.itens_ok;
+    checklistPorLoja[r.loja].naook += r.itens_nao_ok;
+  });
+
+  const linhas = TODAS_LOJAS.map(loja => {
+    const av = ultimaAvalPorLoja[loja];
+    const cl = checklistPorLoja[loja];
+    const pctChecklist = cl && (cl.ok+cl.naook)>0 ? (cl.ok/(cl.ok+cl.naook)*100) : null;
+    return { loja, avPct: av ? Number(av.pontuacao_pct) : null, avData: av ? av.data_avaliacao : null, pctChecklist };
+  }).sort((a,b) => (b.avPct??-1) - (a.avPct??-1));
+
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Loja</th><th>Última Avaliação Externa</th><th>Data</th><th>Conformidade Checklist (7 dias)</th></tr></thead><tbody>'+
+    linhas.map(l => `<tr>
+        <td>${esc(l.loja)}</td>
+        <td>${l.avPct!=null ? '<strong>'+fmtPct(l.avPct)+'</strong>' : '<span style="color:var(--text-light)">Sem avaliação</span>'}</td>
+        <td>${fmtData(l.avData)}</td>
+        <td>${fmtPct(l.pctChecklist)}</td>
+      </tr>`).join('')+
+    '</tbody></table></div>';
+}
+
+async function carregarDashboardPlanos(){
+  const el = $('dashPlanos');
+  const { data, error } = await sb.from('qualidade_planos_acao').select('*').neq('status','concluido').order('prazo_execucao');
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhum plano de ação em aberto. 🎉</div>'; return; }
+  el.innerHTML = data.map(p => {
+    const atrasado = p.prazo_execucao < hojeISO();
+    return `<div class="topico" style="${atrasado?'border-left-color:#B43C3C':''}">
+      <strong>${esc(p.loja)}</strong> — ${esc(p.descricao)}
+      <div class="meta">Prazo: ${fmtData(p.prazo_execucao)} ${atrasado?'⚠ Atrasado':''} ${p.responsavel_nome?'· Resp.: '+esc(p.responsavel_nome):''} · ${STATUS_LABEL[p.status]}</div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// CONFIGURAÇÕES — customização de itens (master / analista de qualidade)
+// ══════════════════════════════════════════════════════════
+async function renderConfig(){
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <h2 style="margin:0">Itens do Checklist Diário</h2>
+        <button class="btn" onclick="abrirModalItemChecklist(null)">+ Novo Item</button>
+      </div>
+      <div id="cfgChecklistLista" class="loading">Carregando…</div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <h2 style="margin:0">Critérios da Avaliação Externa</h2>
+        <button class="btn" onclick="abrirModalItemAvaliacao(null)">+ Novo Critério</button>
+      </div>
+      <div id="cfgAvaliacaoLista" class="loading">Carregando…</div>
+    </div>
+
+    <div class="modal-overlay" id="modalItemChecklist" onclick="if(event.target===this)fecharModal('modalItemChecklist')">
+      <div class="modal">
+        <h3 id="micTitulo">Novo Item — Checklist Diário</h3>
+        <input type="hidden" id="micId">
+        <div class="field" style="margin-bottom:10px"><label>Categoria</label><input class="inp" id="micCategoria" placeholder="Ex: 1. Vitrine"></div>
+        <div class="field" style="margin-bottom:10px"><label>Item (o que checar)</label><textarea class="inp" id="micItem" rows="2"></textarea></div>
+        <div class="row">
+          <div class="field"><label>Ordem</label><input class="inp" type="number" id="micOrdem" value="0"></div>
+          <div class="field"><label>Ativo</label><select class="inp" id="micAtivo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+        </div>
+        <div class="msg" id="micMsg"></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="salvarItemChecklist()">Salvar</button>
+          <button class="btn-outline btn" onclick="fecharModal('modalItemChecklist')">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modalItemAvaliacao" onclick="if(event.target===this)fecharModal('modalItemAvaliacao')">
+      <div class="modal">
+        <h3 id="miaTitulo">Novo Critério — Avaliação Externa</h3>
+        <input type="hidden" id="miaId">
+        <div class="field" style="margin-bottom:10px"><label>Setor / Área de Controle</label><input class="inp" id="miaSetor" placeholder="Ex: Higiene / Limpeza"></div>
+        <div class="field" style="margin-bottom:10px"><label>Item do padrão</label><textarea class="inp" id="miaItem" rows="2"></textarea></div>
+        <div class="row">
+          <div class="field"><label>Ordem</label><input class="inp" type="number" id="miaOrdem" value="0"></div>
+          <div class="field"><label>Pontos Máx.</label><input class="inp" type="number" id="miaPontos" value="10"></div>
+          <div class="field"><label>Ativo</label><select class="inp" id="miaAtivo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+        </div>
+        <div class="msg" id="miaMsg"></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="salvarItemAvaliacao()">Salvar</button>
+          <button class="btn-outline btn" onclick="fecharModal('modalItemAvaliacao')">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+  await Promise.all([carregarConfigChecklist(), carregarConfigAvaliacao()]);
+}
+
+async function carregarConfigChecklist(){
+  const el = $('cfgChecklistLista');
+  const { data, error } = await sb.from('qualidade_checklist_itens').select('*').order('ordem');
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  window.__cfgChecklistCache = data || [];
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Categoria</th><th>Item</th><th>Status</th><th></th></tr></thead><tbody>'+
+    (data||[]).map(it => `<tr class="${it.ativo?'':'inativo'}">
+        <td>${it.ordem}</td><td>${esc(it.categoria)}</td><td>${esc(it.item)}</td>
+        <td><span class="badge ${it.ativo?'badge-ok':'badge-na'}">${it.ativo?'Ativo':'Inativo'}</span></td>
+        <td><button class="btn-outline btn btn-sm" onclick="abrirModalItemChecklist('${it.id}')">Editar</button></td>
+      </tr>`).join('')+
+    '</tbody></table></div>';
+}
+
+async function carregarConfigAvaliacao(){
+  const el = $('cfgAvaliacaoLista');
+  const { data, error } = await sb.from('qualidade_avaliacao_itens').select('*').order('ordem');
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  window.__cfgAvaliacaoCache = data || [];
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Setor</th><th>Item</th><th>Pontos</th><th>Status</th><th></th></tr></thead><tbody>'+
+    (data||[]).map(it => `<tr class="${it.ativo?'':'inativo'}">
+        <td>${it.ordem}</td><td>${esc(it.setor)}</td><td>${esc(it.item)}</td><td>${it.pontos_max}</td>
+        <td><span class="badge ${it.ativo?'badge-ok':'badge-na'}">${it.ativo?'Ativo':'Inativo'}</span></td>
+        <td><button class="btn-outline btn btn-sm" onclick="abrirModalItemAvaliacao('${it.id}')">Editar</button></td>
+      </tr>`).join('')+
+    '</tbody></table></div>';
+}
+
+function abrirModalItemChecklist(id){
+  showMsg('micMsg','','');
+  if(id){
+    const it = (window.__cfgChecklistCache||[]).find(x=>x.id===id);
+    $('micTitulo').textContent = 'Editar Item';
+    $('micId').value = id;
+    $('micCategoria').value = it.categoria;
+    $('micItem').value = it.item;
+    $('micOrdem').value = it.ordem;
+    $('micAtivo').value = String(it.ativo);
+  } else {
+    $('micTitulo').textContent = 'Novo Item — Checklist Diário';
+    $('micId').value = '';
+    $('micCategoria').value = ''; $('micItem').value = ''; $('micOrdem').value = 0; $('micAtivo').value = 'true';
+  }
+  $('modalItemChecklist').classList.add('show');
+}
+
+async function salvarItemChecklist(){
+  const categoria = $('micCategoria').value.trim();
+  const item = $('micItem').value.trim();
+  if(!categoria || !item){ showMsg('micMsg','Preencha categoria e item.','err'); return; }
+  const payload = { categoria, item, ordem: Number($('micOrdem').value)||0, ativo: $('micAtivo').value==='true', atualizado_em: new Date().toISOString() };
+  const id = $('micId').value;
+  const { error } = id
+    ? await sb.from('qualidade_checklist_itens').update(payload).eq('id', id)
+    : await sb.from('qualidade_checklist_itens').insert(payload);
+  if(error){ showMsg('micMsg','Erro: '+error.message,'err'); return; }
+  checklistItensCache = null; // invalida cache pra próxima vez que o checklist for aberto
+  fecharModal('modalItemChecklist');
+  carregarConfigChecklist();
+}
+
+function abrirModalItemAvaliacao(id){
+  showMsg('miaMsg','','');
+  if(id){
+    const it = (window.__cfgAvaliacaoCache||[]).find(x=>x.id===id);
+    $('miaTitulo').textContent = 'Editar Critério';
+    $('miaId').value = id;
+    $('miaSetor').value = it.setor;
+    $('miaItem').value = it.item;
+    $('miaOrdem').value = it.ordem;
+    $('miaPontos').value = it.pontos_max;
+    $('miaAtivo').value = String(it.ativo);
+  } else {
+    $('miaTitulo').textContent = 'Novo Critério — Avaliação Externa';
+    $('miaId').value = '';
+    $('miaSetor').value = ''; $('miaItem').value = ''; $('miaOrdem').value = 0; $('miaPontos').value = 10; $('miaAtivo').value = 'true';
+  }
+  $('modalItemAvaliacao').classList.add('show');
+}
+
+async function salvarItemAvaliacao(){
+  const setor = $('miaSetor').value.trim();
+  const item = $('miaItem').value.trim();
+  const pontos = Number($('miaPontos').value);
+  if(!setor || !item){ showMsg('miaMsg','Preencha setor e item.','err'); return; }
+  if(!pontos || pontos<=0){ showMsg('miaMsg','Informe pontos máximos válidos.','err'); return; }
+  const payload = { setor, item, pontos_max: pontos, ordem: Number($('miaOrdem').value)||0, ativo: $('miaAtivo').value==='true', atualizado_em: new Date().toISOString() };
+  const id = $('miaId').value;
+  const { error } = id
+    ? await sb.from('qualidade_avaliacao_itens').update(payload).eq('id', id)
+    : await sb.from('qualidade_avaliacao_itens').insert(payload);
+  if(error){ showMsg('miaMsg','Erro: '+error.message,'err'); return; }
+  avaliacaoItensCache = null;
+  fecharModal('modalItemAvaliacao');
+  carregarConfigAvaliacao();
+}
+
+verificarAcessoEIniciar();
+</script>
+</body>
+</html>
