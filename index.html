@@ -526,12 +526,18 @@ let avaliacaoLojaSelecionada = null;
 async function renderAvaliacao(){
   avaliacaoLojaSelecionada = souBackoffice ? (TODAS_LOJAS[0]) : lojaAtual;
   const novaBtn = souBackoffice ? '<button class="btn" onclick="abrirNovaAvaliacao()">+ Nova Avaliação Externa</button>' : '';
+  const filtroLoja = souGerencial ? `
+    <div class="field"><label>Loja</label><select class="inp" id="avalFiltroLoja" onchange="renderHistoricoAvaliacoes()">
+      <option value="">Todas as lojas</option>
+      ${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'"'+(l===lojaAtual?' selected':'')+'>'+esc(l)+'</option>').join('')}
+    </select></div>` : '';
   $('mainContent').innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
         <h2 style="margin:0">Avaliações Externas</h2>
         ${novaBtn}
       </div>
+      ${filtroLoja ? '<div class="row">'+filtroLoja+'</div>' : ''}
       <div id="avaliacaoConteudo"></div>
     </div>`;
   await renderHistoricoAvaliacoes();
@@ -541,13 +547,19 @@ async function renderHistoricoAvaliacoes(){
   const el = $('avaliacaoConteudo');
   el.innerHTML = '<div class="loading">Carregando…</div>';
   let q = sb.from('qualidade_avaliacoes').select('*').order('data_avaliacao', {ascending:false});
-  if(!souGerencial) q = q.eq('loja', lojaAtual);
+  if(!souGerencial){
+    q = q.eq('loja', lojaAtual);
+  } else {
+    const filtro = $('avalFiltroLoja') ? $('avalFiltroLoja').value : lojaAtual;
+    if(filtro) q = q.eq('loja', filtro);
+  }
   const { data, error } = await q;
   if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
   if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhuma avaliação externa registrada ainda.</div>'; return; }
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr>'+(souGerencial?'<th>Loja</th>':'')+'<th>Data</th><th>Avaliado por</th><th>Conformes</th><th>Não Conformes</th><th>Pontuação</th><th></th></tr></thead><tbody>'+
+  const mostraLoja = souGerencial && !($('avalFiltroLoja') && $('avalFiltroLoja').value);
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr>'+(mostraLoja?'<th>Loja</th>':'')+'<th>Data</th><th>Avaliado por</th><th>Conformes</th><th>Não Conformes</th><th>Pontuação</th><th></th></tr></thead><tbody>'+
     data.map(a => `<tr>
-        ${souGerencial ? '<td>'+esc(a.loja)+'</td>' : ''}
+        ${mostraLoja ? '<td>'+esc(a.loja)+'</td>' : ''}
         <td>${fmtData(a.data_avaliacao)}</td>
         <td>${esc(a.avaliado_por_nome)}</td>
         <td>${a.itens_conformes}</td>
@@ -708,7 +720,7 @@ async function renderPlanos(){
   const novoBtn = souGerencial ? '<button class="btn" onclick="abrirNovoPlano()">+ Novo Plano</button>' : '';
   const filtroLoja = souGerencial ? `
     <div class="field"><label>Loja</label><select class="inp" id="planoFiltroLoja" onchange="carregarPlanos()">
-      <option value="">Todas</option>${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}
+      <option value="">Todas</option>${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'"'+(l===lojaAtual?' selected':'')+'>'+esc(l)+'</option>').join('')}
     </select></div>` : '';
   $('mainContent').innerHTML = `
     <div class="card">
