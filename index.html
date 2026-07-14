@@ -555,7 +555,7 @@ async function renderHistoricoAvaliacoes(){
         <td><strong>${fmtPct(a.pontuacao_pct)}</strong></td>
         <td style="white-space:nowrap">
           <button class="btn-outline btn btn-sm" onclick="verDetalheAvaliacao('${a.id}')">Ver</button>
-          ${souBackoffice ? '<button class="btn-danger" style="margin-left:8px" onclick="excluirAvaliacao(\''+a.id+'\')">Excluir</button>' : ''}
+          ${souMaster ? '<button class="btn-danger" style="margin-left:8px" onclick="excluirAvaliacao(\''+a.id+'\')">Excluir</button>' : ''}
         </td>
       </tr>`).join('')+
     '</tbody></table></div>';
@@ -584,7 +584,7 @@ async function verDetalheAvaliacao(id){
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center">
       <button class="btn-outline btn btn-sm" onclick="renderHistoricoAvaliacoes()">← Voltar</button>
-      ${souBackoffice ? '<button class="btn-danger" onclick="excluirAvaliacao(\''+id+'\')">Excluir esta avaliação</button>' : ''}
+      ${souMaster ? '<button class="btn-danger" onclick="excluirAvaliacao(\''+id+'\')">Excluir esta avaliação</button>' : ''}
     </div>
     <div class="stat-box" style="margin-top:14px">
       <div class="stat"><div class="num">${fmtPct(aval.pontuacao_pct)}</div><div class="lbl">Pontuação Geral</div></div>
