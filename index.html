@@ -782,7 +782,7 @@ async function carregarPlanos(){
         <td>${fmtData(p.prazo_execucao)}</td>
         <td>${statusPlanoBadge(p)}</td>
         <td><span class="badge badge-na">${p.origem}</span></td>
-        ${souGerencial ? '<td><button class="btn-outline btn btn-sm" onclick="editarPlano(\''+p.id+'\')">Editar</button></td>' : ''}
+        ${souGerencial ? '<td style="white-space:nowrap"><button class="btn-outline btn btn-sm" onclick="editarPlano(\''+p.id+'\')">Editar</button> <button class="btn-danger" style="margin-left:6px" onclick="excluirPlanoDireto(\''+p.id+'\')">Excluir</button></td>' : ''}
       </tr>`).join('')+
     '</tbody></table></div>';
 }
@@ -866,10 +866,14 @@ async function salvarEdicaoPlano(){
 }
 
 async function excluirPlano(){
+  await excluirPlanoDireto(planoEditandoId, true);
+}
+
+async function excluirPlanoDireto(id, veioDoModal){
   if(!confirm('Excluir este plano de ação? Essa ação não pode ser desfeita.')) return;
-  const { error } = await sb.from('qualidade_planos_acao').delete().eq('id', planoEditandoId);
+  const { error } = await sb.from('qualidade_planos_acao').delete().eq('id', id);
   if(error){ alert('Erro: '+error.message); return; }
-  fecharModal('modalEditarPlano');
+  if(veioDoModal) fecharModal('modalEditarPlano');
   carregarPlanos();
 }
 
