@@ -883,6 +883,12 @@ async function excluirPlanoDireto(id, veioDoModal){
 async function renderDashboard(){
   $('mainContent').innerHTML = `
     <div class="card">
+      <h2>Pontuação do Mês por Loja</h2>
+      <p class="hint" style="margin-bottom:10px">Avaliação externa mais recente de cada loja dentro do mês atual — se houver mais de uma, usa a mais atual.</p>
+      <canvas id="chartPontuacaoMes" height="100"></canvas>
+      <div id="dashPontuacaoMesObs" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
       <h2>Notas de Todas as Operações</h2>
       <div id="dashRanking" class="loading">Carregando…</div>
     </div>
@@ -890,7 +896,61 @@ async function renderDashboard(){
       <h2>Planos de Ação em Aberto</h2>
       <div id="dashPlanos" class="loading">Carregando…</div>
     </div>`;
-  await Promise.all([carregarDashboardRanking(), carregarDashboardPlanos()]);
+  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardRanking(), carregarDashboardPlanos()]);
+}
+
+let chartPontuacaoMesRef = null;
+
+async function carregarDashboardPontuacaoMes(){
+  const canvas = $('chartPontuacaoMes');
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0,10);
+  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).toISOString().slice(0,10);
+
+  const { data, error } = await sb.from('qualidade_avaliacoes').select('*')
+    .gte('data_avaliacao', inicioMes).lte('data_avaliacao', fimMes)
+    .order('data_avaliacao', { ascending: false });
+
+  if(error){ canvas.outerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+
+  // A mais recente por loja dentro do mês (o order já veio desc, então a
+  // primeira ocorrência de cada loja é a mais atual).
+  const maisRecentePorLoja = {};
+  (data||[]).forEach(a => { if(!maisRecentePorLoja[a.loja]) maisRecentePorLoja[a.loja] = a; });
+
+  const lojasComNota = TODAS_LOJAS.filter(l => maisRecentePorLoja[l]);
+  const lojasSemNota = TODAS_LOJAS.filter(l => !maisRecentePorLoja[l]);
+
+  if(chartPontuacaoMesRef) chartPontuacaoMesRef.destroy();
+
+  if(!lojasComNota.length){
+    canvas.outerHTML = '<div class="empty">Nenhuma avaliação registrada neste mês ainda.</div>';
+    $('dashPontuacaoMesObs').innerHTML = '';
+    return;
+  }
+
+  const valores = lojasComNota.map(l => Number(maisRecentePorLoja[l].pontuacao_pct));
+  const cores = valores.map(v => v>=80?'#2E7D32': v>=60?'#B8860B':'#B43C3C');
+  const datas = lojasComNota.map(l => fmtData(maisRecentePorLoja[l].data_avaliacao));
+
+  chartPontuacaoMesRef = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: lojasComNota,
+      datasets: [{ label: 'Pontuação (%)', data: valores, backgroundColor: cores, borderRadius: 5, maxBarThickness: 46 }],
+    },
+    options: {
+      scales: { y: { min:0, max:100 } },
+      plugins: {
+        legend: { display:false },
+        tooltip: { callbacks: { afterLabel: (ctx) => 'Avaliada em '+datas[ctx.dataIndex] } },
+      },
+    },
+  });
+
+  $('dashPontuacaoMesObs').innerHTML = lojasSemNota.length
+    ? '<p class="hint">Sem avaliação neste mês ainda: '+lojasSemNota.map(esc).join(', ')+'.</p>'
+    : '';
 }
 
 async function carregarDashboardRanking(){
