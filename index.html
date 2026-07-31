@@ -883,16 +883,15 @@ async function excluirPlanoDireto(id, veioDoModal){
 async function renderDashboard(){
   $('mainContent').innerHTML = `
     <div class="row" style="gap:16px;align-items:stretch">
-      <div class="card" style="flex:1;min-width:280px">
+      <div class="card" style="flex:1;min-width:320px">
         <h2 style="font-size:.95rem">Pontuação do Mês por Loja</h2>
         <p class="hint" style="margin-bottom:8px">Avaliação externa mais recente de cada loja dentro do mês atual.</p>
-        <div style="height:230px"><canvas id="chartPontuacaoMes"></canvas></div>
+        <div style="height:360px"><canvas id="chartPontuacaoMes"></canvas></div>
         <div id="dashPontuacaoMesObs" style="margin-top:8px"></div>
       </div>
-      <div class="card" style="flex:1;min-width:280px">
+      <div class="card" style="flex:1;min-width:320px">
         <h2 style="font-size:.95rem">Evolução Consolidada — Todas as Lojas</h2>
-        <p class="hint" style="margin-bottom:8px">Eixo X é a sequência de visitas (1ª, 2ª, 3ª…) de cada loja, não a data — as avaliações não acontecem nas mesmas datas em cada loja.</p>
-        <div style="height:230px"><canvas id="chartEvolucao"></canvas></div>
+        <div style="height:360px"><canvas id="chartEvolucao"></canvas></div>
       </div>
     </div>
     <div class="card">
@@ -925,7 +924,8 @@ async function carregarDashboardPontuacaoMes(){
   const maisRecentePorLoja = {};
   (data||[]).forEach(a => { if(!maisRecentePorLoja[a.loja]) maisRecentePorLoja[a.loja] = a; });
 
-  const lojasComNota = TODAS_LOJAS.filter(l => maisRecentePorLoja[l]);
+  const lojasComNota = TODAS_LOJAS.filter(l => maisRecentePorLoja[l])
+    .sort((a, b) => Number(maisRecentePorLoja[b].pontuacao_pct) - Number(maisRecentePorLoja[a].pontuacao_pct));
   const lojasSemNota = TODAS_LOJAS.filter(l => !maisRecentePorLoja[l]);
 
   if(chartPontuacaoMesRef) chartPontuacaoMesRef.destroy();
