@@ -882,11 +882,18 @@ async function excluirPlanoDireto(id, veioDoModal){
 // ══════════════════════════════════════════════════════════
 async function renderDashboard(){
   $('mainContent').innerHTML = `
-    <div class="card">
-      <h2>Pontuação do Mês por Loja</h2>
-      <p class="hint" style="margin-bottom:10px">Avaliação externa mais recente de cada loja dentro do mês atual — se houver mais de uma, usa a mais atual.</p>
-      <canvas id="chartPontuacaoMes" height="100"></canvas>
-      <div id="dashPontuacaoMesObs" style="margin-top:10px"></div>
+    <div class="row" style="gap:16px;align-items:stretch">
+      <div class="card" style="flex:1;min-width:280px">
+        <h2 style="font-size:.95rem">Pontuação do Mês por Loja</h2>
+        <p class="hint" style="margin-bottom:8px">Avaliação externa mais recente de cada loja dentro do mês atual.</p>
+        <div style="height:230px"><canvas id="chartPontuacaoMes"></canvas></div>
+        <div id="dashPontuacaoMesObs" style="margin-top:8px"></div>
+      </div>
+      <div class="card" style="flex:1;min-width:280px">
+        <h2 style="font-size:.95rem">Evolução Consolidada — Todas as Lojas</h2>
+        <p class="hint" style="margin-bottom:8px">Eixo X é a sequência de visitas (1ª, 2ª, 3ª…) de cada loja, não a data — as avaliações não acontecem nas mesmas datas em cada loja.</p>
+        <div style="height:230px"><canvas id="chartEvolucao"></canvas></div>
+      </div>
     </div>
     <div class="card">
       <h2>Notas de Todas as Operações</h2>
@@ -896,7 +903,7 @@ async function renderDashboard(){
       <h2>Planos de Ação em Aberto</h2>
       <div id="dashPlanos" class="loading">Carregando…</div>
     </div>`;
-  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardRanking(), carregarDashboardPlanos()]);
+  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardEvolucao(), carregarDashboardRanking(), carregarDashboardPlanos()]);
 }
 
 let chartPontuacaoMesRef = null;
@@ -911,7 +918,7 @@ async function carregarDashboardPontuacaoMes(){
     .gte('data_avaliacao', inicioMes).lte('data_avaliacao', fimMes)
     .order('data_avaliacao', { ascending: false });
 
-  if(error){ canvas.outerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(error){ canvas.closest('div').outerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
 
   // A mais recente por loja dentro do mês (o order já veio desc, então a
   // primeira ocorrência de cada loja é a mais atual).
@@ -924,7 +931,7 @@ async function carregarDashboardPontuacaoMes(){
   if(chartPontuacaoMesRef) chartPontuacaoMesRef.destroy();
 
   if(!lojasComNota.length){
-    canvas.outerHTML = '<div class="empty">Nenhuma avaliação registrada neste mês ainda.</div>';
+    canvas.closest('div').outerHTML = '<div class="empty">Nenhuma avaliação registrada neste mês ainda.</div>';
     $('dashPontuacaoMesObs').innerHTML = '';
     return;
   }
@@ -937,10 +944,13 @@ async function carregarDashboardPontuacaoMes(){
     type: 'bar',
     data: {
       labels: lojasComNota,
-      datasets: [{ label: 'Pontuação (%)', data: valores, backgroundColor: cores, borderRadius: 5, maxBarThickness: 46 }],
+      datasets: [{ label: 'Pontuação (%)', data: valores, backgroundColor: cores, borderRadius: 5, maxBarThickness: 22 }],
     },
     options: {
-      scales: { y: { min:0, max:100 } },
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { x: { min:0, max:100 } },
       plugins: {
         legend: { display:false },
         tooltip: { callbacks: { afterLabel: (ctx) => 'Avaliada em '+datas[ctx.dataIndex] } },
@@ -951,6 +961,50 @@ async function carregarDashboardPontuacaoMes(){
   $('dashPontuacaoMesObs').innerHTML = lojasSemNota.length
     ? '<p class="hint">Sem avaliação neste mês ainda: '+lojasSemNota.map(esc).join(', ')+'.</p>'
     : '';
+}
+
+const CORES_LOJAS = ['#6B1E2E','#A0785A','#2E7D32','#B8860B','#1F6FB2','#8B3345','#5A7A4A','#B43C3C','#4A1220','#7A5840','#3A6B6B'];
+let chartEvolucaoRef = null;
+
+async function carregarDashboardEvolucao(){
+  const canvas = $('chartEvolucao');
+  const { data, error } = await sb.from('qualidade_avaliacoes').select('loja, data_avaliacao, pontuacao_pct').order('data_avaliacao', { ascending: true });
+
+  if(error){ canvas.closest('div').outerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ canvas.closest('div').outerHTML = '<div class="empty">Nenhuma avaliação registrada ainda.</div>'; return; }
+
+  // Agrupa por loja, em ordem cronológica, e numera cada avaliação como a
+  // "N-ésima visita" daquela loja — o eixo X é essa sequência, não a data.
+  const porLoja = {};
+  data.forEach(a => { (porLoja[a.loja] = porLoja[a.loja] || []).push(Number(a.pontuacao_pct)); });
+
+  const lojasComDados = TODAS_LOJAS.filter(l => porLoja[l] && porLoja[l].length);
+  const maxVisitas = Math.max(...lojasComDados.map(l => porLoja[l].length));
+  const labels = Array.from({ length: maxVisitas }, (_, i) => (i+1)+'ª visita');
+
+  if(chartEvolucaoRef) chartEvolucaoRef.destroy();
+
+  chartEvolucaoRef = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: lojasComDados.map((loja, i) => ({
+        label: loja,
+        data: porLoja[loja], // mais curto que maxVisitas pra lojas com menos avaliações — Chart.js só não desenha o resto da linha
+        borderColor: CORES_LOJAS[i % CORES_LOJAS.length],
+        backgroundColor: CORES_LOJAS[i % CORES_LOJAS.length],
+        tension: .3,
+        pointRadius: 2,
+        borderWidth: 2,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { min:0, max:100, title: { display:true, text:'Pontuação (%)' } } },
+      plugins: { legend: { display:true, position:'bottom', labels:{ boxWidth:10, font:{ size:9 } } } },
+    },
+  });
 }
 
 async function carregarDashboardRanking(){
