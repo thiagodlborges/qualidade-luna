@@ -141,6 +141,7 @@
   <div class="tab" id="tabChecklist" data-tab="checklist" onclick="mudarTab('checklist')" style="display:none">📋 Checklist Diário</div>
   <div class="tab" id="tabDesempenho" data-tab="desempenho" onclick="mudarTab('desempenho')" style="display:none">📈 Meu Desempenho</div>
   <div class="tab" id="tabAvaliacao" data-tab="avaliacao" onclick="mudarTab('avaliacao')" style="display:none">🔍 Avaliação Externa</div>
+  <div class="tab" id="tabVitrine" data-tab="vitrine" onclick="mudarTab('vitrine')" style="display:none">🪟 Vitrine</div>
   <div class="tab" id="tabPlanos" data-tab="planos" onclick="mudarTab('planos')" style="display:none">✅ Planos de Ação</div>
   <div class="tab" id="tabDashboard" data-tab="dashboard" onclick="mudarTab('dashboard')" style="display:none">🏆 Dashboard Gerencial</div>
   <div class="tab" id="tabConfig" data-tab="config" onclick="mudarTab('config')" style="display:none">⚙ Configurações</div>
@@ -159,15 +160,18 @@ const PORTAL_URL = 'https://thiagodlborges.github.io/Sistema-Luna/';
 const $ = id => document.getElementById(id);
 
 const TODAS_LOJAS = ['Esplanada','Cianê','Tucuruvi','Indaiatuba','Jundiaí','Praça da Moça - Diadema','Buriti Mogi Guaçu','SP Market','Iguatemi Campinas','Shopping Itaquera','Atrium'];
+const BUCKET_VITRINES = 'qualidade-vitrines';
 
 let meuPerfil = null;
 let minhasLojas = [];
 let lojaAtual = null;
 let currentTab = null;
 let souMaster = false;
+let souMasterLoja = false;
 let souBackoffice = false;
 let souCoordenador = false;
 let souGerencial = false;
+let podeConfigurarAvaliacao = false;
 let temPapelDeLoja = false;
 
 let checklistItensCache = null;
@@ -198,9 +202,11 @@ async function verificarAcessoEIniciar(){
   meuPerfil = perfil;
 
   souMaster = perfil.tipo === 'master';
+  souMasterLoja = perfil.tipo === 'master_loja';
   souBackoffice = souMaster || perfil.qualidade_backoffice === true;
   souCoordenador = perfil.qualidade_coordenador === true;
   souGerencial = souMaster || souBackoffice || souCoordenador;
+  podeConfigurarAvaliacao = souMaster || souMasterLoja;
   temPapelDeLoja = ['loja','master_loja','master'].includes(perfil.tipo);
 
   if (perfil.tipo === 'master' || perfil.tipo === 'master_loja') minhasLojas = [...TODAS_LOJAS];
@@ -223,10 +229,11 @@ async function verificarAcessoEIniciar(){
   }
   if (temPapelDeLoja || souGerencial) {
     $('tabAvaliacao').style.display = '';
+    $('tabVitrine').style.display = '';
     $('tabPlanos').style.display = '';
   }
   if (souGerencial) $('tabDashboard').style.display = '';
-  if (souBackoffice) $('tabConfig').style.display = '';
+  if (souBackoffice || podeConfigurarAvaliacao) $('tabConfig').style.display = '';
 
   currentTab = temPapelDeLoja ? 'checklist' : (souGerencial ? 'dashboard' : 'avaliacao');
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===currentTab));
@@ -248,6 +255,7 @@ function renderTab(){
   if(currentTab==='checklist') renderChecklist();
   else if(currentTab==='desempenho') renderDesempenho();
   else if(currentTab==='avaliacao') renderAvaliacao();
+  else if(currentTab==='vitrine') renderVitrine();
   else if(currentTab==='planos') renderPlanos();
   else if(currentTab==='dashboard') renderDashboard();
   else if(currentTab==='config') renderConfig();
@@ -705,6 +713,235 @@ async function salvarAvaliacaoExterna(){
 }
 
 // ══════════════════════════════════════════════════════════
+// VITRINE (avaliação por estrelas + checklist + foto)
+// ══════════════════════════════════════════════════════════
+let vitrineChecklistCache = null;
+let vitrineRespostasState = {};
+let vitrineEstrelasSelecionadas = 0;
+let vitrineFotoArquivo = null;
+
+async function carregarVitrineChecklistItens(){
+  if(vitrineChecklistCache) return vitrineChecklistCache;
+  const { data, error } = await sb.from('qualidade_vitrine_checklist_itens').select('*').eq('ativo', true).order('ordem');
+  if(error) throw error;
+  vitrineChecklistCache = data || [];
+  return vitrineChecklistCache;
+}
+
+async function renderVitrine(){
+  const novaBtn = souBackoffice ? '<button class="btn" onclick="abrirNovaVitrine()">+ Nova Avaliação de Vitrine</button>' : '';
+  const filtroLoja = souGerencial ? `
+    <div class="field"><label>Loja</label><select class="inp" id="vitFiltroLoja" onchange="renderMediaVitrine();renderHistoricoVitrine()">
+      <option value="">Todas as lojas</option>
+      ${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'"'+(l===lojaAtual?' selected':'')+'>'+esc(l)+'</option>').join('')}
+    </select></div>` : '';
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+        <h2 style="margin:0">Vitrine</h2>
+        ${novaBtn}
+      </div>
+      ${filtroLoja ? '<div class="row">'+filtroLoja+'</div>' : ''}
+      <div id="vitMediaResumo" class="loading">Carregando…</div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">Histórico</h2>
+      <div id="vitrineConteudo"></div>
+    </div>`;
+  await Promise.all([renderMediaVitrine(), renderHistoricoVitrine()]);
+}
+
+function vitrineLojaFiltro(){
+  return souGerencial ? ($('vitFiltroLoja') ? $('vitFiltroLoja').value : '') : lojaAtual;
+}
+
+function renderEstrelasFixas(n){
+  return '★'.repeat(n) + '☆'.repeat(5-n);
+}
+
+async function renderMediaVitrine(){
+  const el = $('vitMediaResumo');
+  if(!el) return;
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const loja = vitrineLojaFiltro();
+  const trintaDiasAtras = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+  let q = sb.from('qualidade_vitrine_avaliacoes').select('estrelas').gte('data_avaliacao', trintaDiasAtras);
+  if(loja) q = q.eq('loja', loja);
+  const { data, error } = await q;
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ el.innerHTML = '<p class="hint" style="margin:0">Nenhuma avaliação de vitrine nos últimos 30 dias'+(loja?' em '+esc(loja):'')+'.</p>'; return; }
+  const media = data.reduce((s,a)=>s+a.estrelas,0) / data.length;
+  const cheias = Math.round(media);
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="font-size:1.8rem;letter-spacing:2px">${renderEstrelasFixas(cheias)}</div>
+    <div><strong>${media.toFixed(1)}</strong> / 5 — média dos últimos 30 dias${loja?' em '+esc(loja):' (todas as lojas)'} (${data.length} avaliação${data.length>1?'ões':''})</div>
+  </div>`;
+}
+
+async function renderHistoricoVitrine(){
+  const el = $('vitrineConteudo');
+  if(!el) return;
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const loja = vitrineLojaFiltro();
+  let q = sb.from('qualidade_vitrine_avaliacoes').select('*').order('data_avaliacao', {ascending:false}).order('criado_em', {ascending:false});
+  if(loja) q = q.eq('loja', loja);
+  const { data, error } = await q;
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhuma avaliação de vitrine registrada ainda.</div>'; return; }
+  const mostraLoja = souGerencial && !loja;
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr>'+(mostraLoja?'<th>Loja</th>':'')+'<th>Vitrine</th><th>Data</th><th>Avaliado por</th><th>Estrelas</th><th></th></tr></thead><tbody>'+
+    data.map(a => `<tr>
+        ${mostraLoja ? '<td>'+esc(a.loja)+'</td>' : ''}
+        <td>${esc(a.vitrine_nome)}</td>
+        <td>${fmtData(a.data_avaliacao)}</td>
+        <td>${esc(a.avaliado_por_nome||'—')}</td>
+        <td>${renderEstrelasFixas(a.estrelas)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-outline btn btn-sm" onclick="verDetalheVitrine('${a.id}')">Ver</button>
+          ${souMaster ? '<button class="btn-danger" style="margin-left:8px" onclick="excluirVitrine(\''+a.id+'\')">Excluir</button>' : ''}
+        </td>
+      </tr>`).join('')+
+    '</tbody></table></div>';
+}
+
+async function excluirVitrine(id){
+  if(!confirm('Excluir esta avaliação de vitrine? Essa ação não pode ser desfeita.')) return;
+  const { error } = await sb.from('qualidade_vitrine_avaliacoes').delete().eq('id', id);
+  if(error){ alert('Erro ao excluir: '+error.message); return; }
+  await Promise.all([renderMediaVitrine(), renderHistoricoVitrine()]);
+}
+
+async function verDetalheVitrine(id){
+  const el = $('vitrineConteudo');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  const [{ data: aval }, { data: respostas }] = await Promise.all([
+    sb.from('qualidade_vitrine_avaliacoes').select('*').eq('id', id).single(),
+    sb.from('qualidade_vitrine_respostas').select('*').eq('avaliacao_id', id),
+  ]);
+
+  let fotoHtml = '<p class="hint">Sem foto.</p>';
+  const caminhoPasta = aval.loja+'/'+id;
+  const { data: arquivos } = await sb.storage.from(BUCKET_VITRINES).list(caminhoPasta);
+  if(arquivos && arquivos.length){
+    const { data: signed } = await sb.storage.from(BUCKET_VITRINES).createSignedUrl(caminhoPasta+'/'+arquivos[0].name, 3600);
+    if(signed) fotoHtml = '<a href="'+signed.signedUrl+'" target="_blank"><img src="'+signed.signedUrl+'" style="max-width:320px;border-radius:8px;margin:10px 0"></a>';
+  }
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <button class="btn-outline btn btn-sm" onclick="renderHistoricoVitrine()">← Voltar</button>
+      ${souMaster ? '<button class="btn-danger" onclick="excluirVitrine(\''+id+'\')">Excluir esta avaliação</button>' : ''}
+    </div>
+    <h3 style="margin-bottom:2px">${esc(aval.vitrine_nome)}</h3>
+    <p class="hint" style="margin-top:0">${esc(aval.loja)} — avaliado por ${esc(aval.avaliado_por_nome||'—')} em ${fmtData(aval.data_avaliacao)}</p>
+    <div style="font-size:1.6rem;letter-spacing:2px">${renderEstrelasFixas(aval.estrelas)}</div>
+    ${fotoHtml}
+    ${aval.observacao ? '<p style="font-size:.85rem">💬 '+esc(aval.observacao)+'</p>' : ''}
+    <div class="categoria-titulo">Checklist</div>
+    ${(respostas||[]).map(r => `<div class="check-item ${r.marcado?'status-ok':'status-na'}">
+      <div class="texto">${esc(r.item_texto)}</div>
+      <span class="badge badge-${r.marcado?'ok':'na'}">${r.marcado?'✓ Sim':'— Não'}</span>
+    </div>`).join('')}`;
+}
+
+async function abrirNovaVitrine(){
+  const el = $('vitrineConteudo');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  let itens;
+  try { itens = await carregarVitrineChecklistItens(); }
+  catch(e){ el.innerHTML = '<div class="empty">Erro: '+esc(e.message)+'</div>'; return; }
+
+  vitrineRespostasState = {};
+  itens.forEach(it => { vitrineRespostasState[it.id] = false; });
+  vitrineEstrelasSelecionadas = 0;
+  vitrineFotoArquivo = null;
+
+  el.innerHTML = `
+    <div class="row">
+      <div class="field"><label>Loja avaliada</label>
+        <select class="inp" id="vitLoja">
+          ${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}
+        </select>
+      </div>
+      <div class="field"><label>Data</label><input class="inp" type="date" id="vitData" value="${hojeISO()}" max="${hojeISO()}"></div>
+    </div>
+    <div class="field" style="margin-bottom:10px"><label>Identificação da vitrine</label><input class="inp" id="vitNome" placeholder="Ex: Vitrine Direita - Lado Direito"></div>
+    <div class="field" style="margin-bottom:10px"><label>Foto</label><input class="inp" type="file" id="vitFoto" accept="image/*" onchange="vitrineFotoArquivo=this.files[0]||null"></div>
+    <div class="field" style="margin-bottom:14px">
+      <label>Estrelas</label>
+      <div id="vitEstrelasPicker" style="font-size:2rem;letter-spacing:4px;cursor:pointer;line-height:1">${renderEstrelasPicker()}</div>
+    </div>
+    <div class="categoria-titulo">Checklist</div>
+    ${itens.map(it => renderVitrineItemForm(it)).join('')}
+    <div class="msg" id="vitrineMsg"></div>
+    <div class="modal-actions">
+      <button class="btn" id="btnSalvarVitrine" onclick="salvarAvaliacaoVitrine()">💾 Salvar Avaliação</button>
+      <button class="btn-outline btn" onclick="renderHistoricoVitrine()">Cancelar</button>
+    </div>`;
+}
+
+function renderEstrelasPicker(){
+  let html = '';
+  for(let i=1;i<=5;i++){
+    html += `<span onclick="marcarEstrelaVitrine(${i})">${i<=vitrineEstrelasSelecionadas ? '★' : '☆'}</span>`;
+  }
+  return html;
+}
+
+function marcarEstrelaVitrine(n){
+  vitrineEstrelasSelecionadas = n;
+  const el = $('vitEstrelasPicker');
+  if(el) el.innerHTML = renderEstrelasPicker();
+}
+
+function renderVitrineItemForm(it){
+  const marcado = !!vitrineRespostasState[it.id];
+  return `
+    <label class="check-item" style="display:flex;align-items:center;gap:10px;cursor:pointer" for="vititem-${it.id}">
+      <input type="checkbox" id="vititem-${it.id}" ${marcado?'checked':''} onchange="vitrineRespostasState['${it.id}']=this.checked">
+      <span class="texto" style="margin:0">${esc(it.item)}</span>
+    </label>`;
+}
+
+async function salvarAvaliacaoVitrine(){
+  const loja = $('vitLoja').value;
+  const vitrineNome = $('vitNome').value.trim();
+  if(!vitrineNome){ showMsg('vitrineMsg','Informe a identificação da vitrine.','err'); return; }
+  if(!vitrineEstrelasSelecionadas){ showMsg('vitrineMsg','Marque de 1 a 5 estrelas.','err'); return; }
+
+  const itens = vitrineChecklistCache || [];
+  const btn = $('btnSalvarVitrine');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+
+  const { data: novaAval, error } = await sb.from('qualidade_vitrine_avaliacoes').insert({
+    loja, vitrine_nome: vitrineNome, data_avaliacao: $('vitData').value,
+    avaliado_por: meuPerfil.id, avaliado_por_nome: meuPerfil.nome,
+    estrelas: vitrineEstrelasSelecionadas,
+  }).select('id').single();
+
+  if(error){ showMsg('vitrineMsg','Erro: '+error.message,'err'); btn.disabled=false; btn.textContent='💾 Salvar Avaliação'; return; }
+
+  if(itens.length){
+    const respostasPayload = itens.map(it => ({
+      avaliacao_id: novaAval.id, item_id: it.id, item_texto: it.item, marcado: !!vitrineRespostasState[it.id],
+    }));
+    const { error: errResp } = await sb.from('qualidade_vitrine_respostas').insert(respostasPayload);
+    if(errResp){ showMsg('vitrineMsg','Avaliação salva, mas houve erro ao gravar o checklist: '+errResp.message,'err'); }
+  }
+
+  if(vitrineFotoArquivo){
+    btn.textContent = 'Enviando foto…';
+    const caminho = loja+'/'+novaAval.id+'/'+Date.now()+'-'+vitrineFotoArquivo.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const { error: upErr } = await sb.storage.from(BUCKET_VITRINES).upload(caminho, vitrineFotoArquivo);
+    if(upErr) console.error('Falha ao subir foto da vitrine', upErr.message);
+  }
+
+  btn.disabled = false; btn.textContent = '💾 Salvar Avaliação';
+  showMsg('vitrineMsg','Avaliação de vitrine salva!','ok');
+  await Promise.all([renderMediaVitrine(), renderHistoricoVitrine()]);
+}
+
+// ══════════════════════════════════════════════════════════
 // PLANOS DE AÇÃO
 // ══════════════════════════════════════════════════════════
 const STATUS_LABEL = {pendente:'Pendente', em_andamento:'Em Andamento', concluido:'Concluído'};
@@ -884,8 +1121,11 @@ async function renderDashboard(){
   $('mainContent').innerHTML = `
     <div class="row" style="gap:16px;align-items:stretch">
       <div class="card" style="flex:1;min-width:320px">
-        <h2 style="font-size:.95rem">Pontuação do Mês por Loja</h2>
-        <p class="hint" style="margin-bottom:8px">Avaliação externa mais recente de cada loja dentro do mês atual.</p>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h2 style="font-size:.95rem;margin:0">Pontuação do Mês por Loja</h2>
+          <input class="inp" type="month" id="dashMesPontuacao" style="max-width:160px" value="${new Date().toISOString().slice(0,7)}" onchange="carregarDashboardPontuacaoMes()">
+        </div>
+        <p class="hint" style="margin-bottom:8px">Avaliação externa mais recente de cada loja dentro do mês selecionado.</p>
         <div style="height:480px"><canvas id="chartPontuacaoMes"></canvas></div>
         <div id="dashPontuacaoMesObs" style="margin-top:8px"></div>
       </div>
@@ -909,9 +1149,10 @@ let chartPontuacaoMesRef = null;
 
 async function carregarDashboardPontuacaoMes(){
   const canvas = $('chartPontuacaoMes');
-  const hoje = new Date();
-  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0,10);
-  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth()+1, 0).toISOString().slice(0,10);
+  const mesInput = $('dashMesPontuacao').value; // "YYYY-MM"
+  const [ano, mes] = mesInput.split('-').map(Number);
+  const inicioMes = new Date(ano, mes-1, 1).toISOString().slice(0,10);
+  const fimMes = new Date(ano, mes, 0).toISOString().slice(0,10);
 
   const { data, error } = await sb.from('qualidade_avaliacoes').select('*')
     .gte('data_avaliacao', inicioMes).lte('data_avaliacao', fimMes)
@@ -1061,21 +1302,40 @@ async function carregarDashboardPlanos(){
 // CONFIGURAÇÕES — customização de itens (master / analista de qualidade)
 // ══════════════════════════════════════════════════════════
 async function renderConfig(){
-  $('mainContent').innerHTML = `
+  const cardChecklist = souBackoffice ? `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
         <h2 style="margin:0">Itens do Checklist Diário</h2>
         <button class="btn" onclick="abrirModalItemChecklist(null)">+ Novo Item</button>
       </div>
       <div id="cfgChecklistLista" class="loading">Carregando…</div>
-    </div>
+    </div>` : '';
+
+  const cardAvaliacao = podeConfigurarAvaliacao ? `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
         <h2 style="margin:0">Critérios da Avaliação Externa</h2>
         <button class="btn" onclick="abrirModalItemAvaliacao(null)">+ Novo Critério</button>
       </div>
+      <p class="hint">Só master e master de loja podem editar pesos aqui.</p>
       <div id="cfgAvaliacaoLista" class="loading">Carregando…</div>
-    </div>
+    </div>` : '';
+
+  const cardVitrine = podeConfigurarAvaliacao ? `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <h2 style="margin:0">Itens do Checklist de Vitrine</h2>
+        <button class="btn" onclick="abrirModalItemVitrine(null)">+ Novo Item</button>
+      </div>
+      <p class="hint">Só master e master de loja podem editar aqui.</p>
+      <div id="cfgVitrineLista" class="loading">Carregando…</div>
+    </div>` : '';
+
+  $('mainContent').innerHTML = `
+    ${cardChecklist}
+    ${cardAvaliacao}
+    ${cardVitrine}
+    ${(!cardChecklist && !cardAvaliacao && !cardVitrine) ? '<div class="card"><div class="empty">Você não tem nada pra configurar por aqui.</div></div>' : ''}
 
     <div class="modal-overlay" id="modalItemChecklist" onclick="if(event.target===this)fecharModal('modalItemChecklist')">
       <div class="modal">
@@ -1112,8 +1372,29 @@ async function renderConfig(){
           <button class="btn-outline btn" onclick="fecharModal('modalItemAvaliacao')">Cancelar</button>
         </div>
       </div>
+    </div>
+
+    <div class="modal-overlay" id="modalItemVitrine" onclick="if(event.target===this)fecharModal('modalItemVitrine')">
+      <div class="modal">
+        <h3 id="mivTitulo">Novo Item — Checklist de Vitrine</h3>
+        <input type="hidden" id="mivId">
+        <div class="field" style="margin-bottom:10px"><label>Item (o que checar)</label><textarea class="inp" id="mivItem" rows="2"></textarea></div>
+        <div class="row">
+          <div class="field"><label>Ordem</label><input class="inp" type="number" id="mivOrdem" value="0"></div>
+          <div class="field"><label>Ativo</label><select class="inp" id="mivAtivo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+        </div>
+        <div class="msg" id="mivMsg"></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="salvarItemVitrine()">Salvar</button>
+          <button class="btn-outline btn" onclick="fecharModal('modalItemVitrine')">Cancelar</button>
+        </div>
+      </div>
     </div>`;
-  await Promise.all([carregarConfigChecklist(), carregarConfigAvaliacao()]);
+
+  const carregamentos = [];
+  if(souBackoffice) carregamentos.push(carregarConfigChecklist());
+  if(podeConfigurarAvaliacao) carregamentos.push(carregarConfigAvaliacao(), carregarConfigVitrine());
+  await Promise.all(carregamentos);
 }
 
 async function carregarConfigChecklist(){
@@ -1211,6 +1492,51 @@ async function salvarItemAvaliacao(){
   avaliacaoItensCache = null;
   fecharModal('modalItemAvaliacao');
   carregarConfigAvaliacao();
+}
+
+async function carregarConfigVitrine(){
+  const el = $('cfgVitrineLista');
+  const { data, error } = await sb.from('qualidade_vitrine_checklist_itens').select('*').order('ordem');
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  window.__cfgVitrineCache = data || [];
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Item</th><th>Status</th><th></th></tr></thead><tbody>'+
+    (data||[]).map(it => `<tr class="${it.ativo?'':'inativo'}">
+        <td>${it.ordem}</td><td>${esc(it.item)}</td>
+        <td><span class="badge ${it.ativo?'badge-ok':'badge-na'}">${it.ativo?'Ativo':'Inativo'}</span></td>
+        <td><button class="btn-outline btn btn-sm" onclick="abrirModalItemVitrine('${it.id}')">Editar</button></td>
+      </tr>`).join('')+
+    '</tbody></table></div>';
+}
+
+function abrirModalItemVitrine(id){
+  showMsg('mivMsg','','');
+  if(id){
+    const it = (window.__cfgVitrineCache||[]).find(x=>x.id===id);
+    $('mivTitulo').textContent = 'Editar Item';
+    $('mivId').value = id;
+    $('mivItem').value = it.item;
+    $('mivOrdem').value = it.ordem;
+    $('mivAtivo').value = String(it.ativo);
+  } else {
+    $('mivTitulo').textContent = 'Novo Item — Checklist de Vitrine';
+    $('mivId').value = '';
+    $('mivItem').value = ''; $('mivOrdem').value = 0; $('mivAtivo').value = 'true';
+  }
+  $('modalItemVitrine').classList.add('show');
+}
+
+async function salvarItemVitrine(){
+  const item = $('mivItem').value.trim();
+  if(!item){ showMsg('mivMsg','Preencha o item.','err'); return; }
+  const payload = { item, ordem: Number($('mivOrdem').value)||0, ativo: $('mivAtivo').value==='true', atualizado_em: new Date().toISOString() };
+  const id = $('mivId').value;
+  const { error } = id
+    ? await sb.from('qualidade_vitrine_checklist_itens').update(payload).eq('id', id)
+    : await sb.from('qualidade_vitrine_checklist_itens').insert(payload);
+  if(error){ showMsg('mivMsg','Erro: '+error.message,'err'); return; }
+  vitrineChecklistCache = null;
+  fecharModal('modalItemVitrine');
+  carregarConfigVitrine();
 }
 
 verificarAcessoEIniciar();
