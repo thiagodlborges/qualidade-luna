@@ -142,7 +142,8 @@
   <div class="tab" id="tabDesempenho" data-tab="desempenho" onclick="mudarTab('desempenho')" style="display:none">📈 Meu Desempenho</div>
   <div class="tab" id="tabAvaliacao" data-tab="avaliacao" onclick="mudarTab('avaliacao')" style="display:none">🔍 Avaliação Externa</div>
   <div class="tab" id="tabVitrine" data-tab="vitrine" onclick="mudarTab('vitrine')" style="display:none">🪟 Vitrine</div>
-  <div class="tab" id="tabPlanos" data-tab="planos" onclick="mudarTab('planos')" style="display:none">✅ Planos de Ação</div>
+  <div class="tab" id="tabManual" data-tab="manual" onclick="mudarTab('manual')" style="display:none">📘 Manual de Padrões Operacionais</div>
+  <div class="tab" id="tabNaoConformidades" data-tab="naoconf" onclick="mudarTab('naoconf')" style="display:none">📊 Recorrência de Não Conformidades</div>
   <div class="tab" id="tabDashboard" data-tab="dashboard" onclick="mudarTab('dashboard')" style="display:none">🏆 Dashboard Gerencial</div>
   <div class="tab" id="tabConfig" data-tab="config" onclick="mudarTab('config')" style="display:none">⚙ Configurações</div>
 </nav>
@@ -230,7 +231,8 @@ async function verificarAcessoEIniciar(){
   if (temPapelDeLoja || souGerencial) {
     $('tabAvaliacao').style.display = '';
     $('tabVitrine').style.display = '';
-    $('tabPlanos').style.display = '';
+    $('tabManual').style.display = '';
+    $('tabNaoConformidades').style.display = '';
   }
   if (souGerencial) $('tabDashboard').style.display = '';
   if (souBackoffice || podeConfigurarAvaliacao) $('tabConfig').style.display = '';
@@ -256,7 +258,8 @@ function renderTab(){
   else if(currentTab==='desempenho') renderDesempenho();
   else if(currentTab==='avaliacao') renderAvaliacao();
   else if(currentTab==='vitrine') renderVitrine();
-  else if(currentTab==='planos') renderPlanos();
+  else if(currentTab==='manual') renderManual();
+  else if(currentTab==='naoconf') renderNaoConformidades();
   else if(currentTab==='dashboard') renderDashboard();
   else if(currentTab==='config') renderConfig();
 }
@@ -582,9 +585,7 @@ async function renderHistoricoAvaliacoes(){
 }
 
 async function excluirAvaliacao(id){
-  const { count } = await sb.from('qualidade_planos_acao').select('id', {count:'exact', head:true}).eq('origem_avaliacao_id', id);
-  const avisoPlanos = count ? `\n\nAtenção: ${count} plano(s) de ação gerado(s) por esta avaliação NÃO serão excluídos — eles só perdem o vínculo com ela. Se quiser removê-los também, faça isso na aba Planos de Ação.` : '';
-  if(!confirm('Excluir esta avaliação externa? Essa ação não pode ser desfeita.'+avisoPlanos)) return;
+  if(!confirm('Excluir esta avaliação externa? Essa ação não pode ser desfeita.')) return;
 
   const { error } = await sb.from('qualidade_avaliacoes').delete().eq('id', id);
   if(error){ alert('Erro ao excluir: '+error.message); return; }
@@ -942,176 +943,246 @@ async function salvarAvaliacaoVitrine(){
 }
 
 // ══════════════════════════════════════════════════════════
-// PLANOS DE AÇÃO
+// MANUAL DE PADRÕES OPERACIONAIS (guia de orientação, editável por master/master_loja)
 // ══════════════════════════════════════════════════════════
-const STATUS_LABEL = {pendente:'Pendente', em_andamento:'Em Andamento', concluido:'Concluído'};
+let manualPadroesCache = null;
 
-function statusPlanoBadge(p){
-  const atrasado = p.status !== 'concluido' && p.prazo_execucao < hojeISO();
-  if(atrasado) return '<span class="badge badge-atrasado">Atrasado</span>';
-  const cls = p.status==='concluido'?'concluido':p.status==='em_andamento'?'andamento':'pendente';
-  return '<span class="badge badge-'+cls+'">'+STATUS_LABEL[p.status]+'</span>';
-}
-
-async function renderPlanos(){
-  const novoBtn = souGerencial ? '<button class="btn" onclick="abrirNovoPlano()">+ Novo Plano</button>' : '';
-  const filtroLoja = souGerencial ? `
-    <div class="field"><label>Loja</label><select class="inp" id="planoFiltroLoja" onchange="carregarPlanos()">
-      <option value="">Todas</option>${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'"'+(l===lojaAtual?' selected':'')+'>'+esc(l)+'</option>').join('')}
-    </select></div>` : '';
+async function renderManual(){
   $('mainContent').innerHTML = `
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <h2 style="margin:0">Planos de Ação</h2>
-        ${novoBtn}
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+        <h2 style="margin:0">📘 Manual de Padrões Operacionais</h2>
+        ${podeConfigurarAvaliacao ? '<button class="btn" onclick="abrirModalItemManual(null)">+ Novo Item</button>' : ''}
       </div>
-      <div class="row">
-        ${filtroLoja}
-        <div class="field"><label>Status</label><select class="inp" id="planoFiltroStatus" onchange="carregarPlanos()">
-          <option value="">Todos</option><option value="pendente">Pendente</option><option value="em_andamento">Em Andamento</option><option value="concluido">Concluído</option>
-        </select></div>
-      </div>
-      <div id="planosLista" class="loading">Carregando…</div>
+      <p class="hint">Guia orientativo para treinamento e preparação da unidade Luna Gelato e Café.</p>
+      <div id="manualConteudo" class="loading">Carregando…</div>
     </div>
-    <div class="modal-overlay" id="modalNovoPlano" onclick="if(event.target===this)fecharModal('modalNovoPlano')">
+
+    <div class="modal-overlay" id="modalItemManual" onclick="if(event.target===this)fecharModal('modalItemManual')">
       <div class="modal">
-        <h3>Novo Plano de Ação</h3>
-        <div class="field" style="margin-bottom:10px"><label>Loja</label><select class="inp" id="npLoja">${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}</select></div>
-        <div class="field" style="margin-bottom:10px"><label>Descrição</label><textarea class="inp" id="npDescricao" rows="2"></textarea></div>
+        <h3 id="mimTitulo">Novo Item — Manual de Padrões</h3>
+        <input type="hidden" id="mimId">
+        <div class="field" style="margin-bottom:10px"><label>Área / Pilar</label><input class="inp" id="mimArea" placeholder="Ex: Estoque 100% Completo"></div>
+        <div class="field" style="margin-bottom:10px"><label>Exigência da Operação</label><textarea class="inp" id="mimExigencia" rows="2"></textarea></div>
+        <div class="field" style="margin-bottom:10px"><label>Padrão de Excelência Luna Gelato</label><textarea class="inp" id="mimPadrao" rows="2"></textarea></div>
+        <div class="field" style="margin-bottom:10px"><label>O que Evitar (Inconformidade)</label><textarea class="inp" id="mimEvitar" rows="2"></textarea></div>
+        <div class="field" style="margin-bottom:10px"><label>Ação Imediata em Caso de Falha</label><textarea class="inp" id="mimAcao" rows="2"></textarea></div>
         <div class="row">
-          <div class="field"><label>Responsável</label><input class="inp" id="npResponsavel"></div>
-          <div class="field"><label>Prazo de execução</label><input class="inp" type="date" id="npPrazo" value="${hojeISO()}"></div>
+          <div class="field"><label>Ordem</label><input class="inp" type="number" id="mimOrdem" value="0"></div>
+          <div class="field"><label>Ativo</label><select class="inp" id="mimAtivo"><option value="true">Sim</option><option value="false">Não</option></select></div>
         </div>
-        <div class="msg" id="npMsg"></div>
+        <div class="msg" id="mimMsg"></div>
         <div class="modal-actions">
-          <button class="btn" onclick="salvarNovoPlano()">Salvar</button>
-          <button class="btn-outline btn" onclick="fecharModal('modalNovoPlano')">Cancelar</button>
+          <button class="btn" onclick="salvarItemManual()">Salvar</button>
+          <button class="btn-outline btn" onclick="fecharModal('modalItemManual')">Cancelar</button>
         </div>
       </div>
     </div>`;
-  await carregarPlanos();
+  await carregarManual();
 }
 
-async function carregarPlanos(){
-  const el = $('planosLista');
-  el.innerHTML = '<div class="loading">Carregando…</div>';
-  let q = sb.from('qualidade_planos_acao').select('*').order('prazo_execucao');
-  if(!souGerencial) q = q.eq('loja', lojaAtual);
-  else {
-    const fl = $('planoFiltroLoja') ? $('planoFiltroLoja').value : '';
-    if(fl) q = q.eq('loja', fl);
-  }
-  const fs = $('planoFiltroStatus') ? $('planoFiltroStatus').value : '';
-  if(fs) q = q.eq('status', fs);
-
-  const { data, error } = await q;
+async function carregarManual(){
+  const el = $('manualConteudo');
+  const query = podeConfigurarAvaliacao
+    ? sb.from('qualidade_manual_padroes').select('*').order('ordem')
+    : sb.from('qualidade_manual_padroes').select('*').eq('ativo', true).order('ordem');
+  const { data, error } = await query;
   if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
-  if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhum plano de ação encontrado.</div>'; return; }
+  manualPadroesCache = data || [];
+  if(!manualPadroesCache.length){ el.innerHTML = '<div class="empty">Nenhum item cadastrado ainda.</div>'; return; }
 
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr>'+
-    (souGerencial?'<th>Loja</th>':'')+
-    '<th>Descrição</th><th>Responsável</th><th>Prazo</th><th>Status</th><th>Origem</th>'+(souGerencial?'<th></th>':'')+
-    '</tr></thead><tbody>'+
-    data.map(p => `<tr>
-        ${souGerencial ? '<td>'+esc(p.loja)+'</td>' : ''}
-        <td>${esc(p.descricao)}</td>
-        <td>${esc(p.responsavel_nome||'—')}</td>
-        <td>${fmtData(p.prazo_execucao)}</td>
-        <td>${statusPlanoBadge(p)}</td>
-        <td><span class="badge badge-na">${p.origem}</span></td>
-        ${souGerencial ? '<td style="white-space:nowrap"><button class="btn-outline btn btn-sm" onclick="editarPlano(\''+p.id+'\')">Editar</button> <button class="btn-danger" style="margin-left:6px" onclick="excluirPlanoDireto(\''+p.id+'\')">Excluir</button></td>' : ''}
-      </tr>`).join('')+
+  el.innerHTML = manualPadroesCache.map(it => `
+    <div class="topico ${it.ativo?'':'inativo'}" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+        <strong style="font-size:1.02rem">${esc(it.area_pilar)}</strong>
+        <div style="white-space:nowrap;display:flex;align-items:center;gap:8px">
+          ${!it.ativo ? '<span class="badge badge-na">Inativo</span>' : ''}
+          ${podeConfigurarAvaliacao ? `
+            <button class="btn-outline btn btn-sm" onclick="abrirModalItemManual('${it.id}')">Editar</button>
+            <button class="btn-danger" onclick="excluirItemManual('${it.id}')">🗑️</button>
+          ` : ''}
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:.85rem;display:grid;gap:8px">
+        <div><span style="font-weight:600;color:var(--text-light)">Exigência da Operação:</span> ${esc(it.exigencia)}</div>
+        <div><span style="font-weight:600;color:#2E7D32">Padrão de Excelência:</span> ${esc(it.padrao_excelencia)}</div>
+        <div><span style="font-weight:600;color:#B43C3C">O que Evitar:</span> ${esc(it.o_que_evitar)}</div>
+        <div><span style="font-weight:600;color:#B8860B">Ação Imediata em Caso de Falha:</span> ${esc(it.acao_imediata)}</div>
+      </div>
+    </div>`).join('');
+}
+
+function abrirModalItemManual(id){
+  showMsg('mimMsg','','');
+  if(id){
+    const it = (manualPadroesCache||[]).find(x=>x.id===id);
+    $('mimTitulo').textContent = 'Editar Item';
+    $('mimId').value = id;
+    $('mimArea').value = it.area_pilar;
+    $('mimExigencia').value = it.exigencia;
+    $('mimPadrao').value = it.padrao_excelencia;
+    $('mimEvitar').value = it.o_que_evitar;
+    $('mimAcao').value = it.acao_imediata;
+    $('mimOrdem').value = it.ordem;
+    $('mimAtivo').value = String(it.ativo);
+  } else {
+    $('mimTitulo').textContent = 'Novo Item — Manual de Padrões';
+    $('mimId').value = '';
+    $('mimArea').value=''; $('mimExigencia').value=''; $('mimPadrao').value=''; $('mimEvitar').value=''; $('mimAcao').value='';
+    $('mimOrdem').value = (manualPadroesCache||[]).length ? Math.max(...manualPadroesCache.map(x=>x.ordem))+1 : 1;
+    $('mimAtivo').value = 'true';
+  }
+  $('modalItemManual').classList.add('show');
+}
+
+async function salvarItemManual(){
+  const area_pilar = $('mimArea').value.trim();
+  const exigencia = $('mimExigencia').value.trim();
+  const padrao_excelencia = $('mimPadrao').value.trim();
+  const o_que_evitar = $('mimEvitar').value.trim();
+  const acao_imediata = $('mimAcao').value.trim();
+  if(!area_pilar || !exigencia || !padrao_excelencia || !o_que_evitar || !acao_imediata){
+    showMsg('mimMsg','Preencha todos os campos.','err'); return;
+  }
+  const payload = { area_pilar, exigencia, padrao_excelencia, o_que_evitar, acao_imediata, ordem: Number($('mimOrdem').value)||0, ativo: $('mimAtivo').value==='true', atualizado_em: new Date().toISOString() };
+  const id = $('mimId').value;
+  const { error } = id
+    ? await sb.from('qualidade_manual_padroes').update(payload).eq('id', id)
+    : await sb.from('qualidade_manual_padroes').insert(payload);
+  if(error){ showMsg('mimMsg','Erro: '+error.message,'err'); return; }
+  fecharModal('modalItemManual');
+  carregarManual();
+}
+
+async function excluirItemManual(id){
+  if(!confirm('Excluir este item do manual? Essa ação não pode ser desfeita.')) return;
+  const { error } = await sb.from('qualidade_manual_padroes').delete().eq('id', id);
+  if(error){ alert('Erro ao excluir: '+error.message); return; }
+  carregarManual();
+}
+
+// ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// RECORRÊNCIA DE NÃO CONFORMIDADES (substituiu os Planos de Ação, que estavam sem uso)
+// ══════════════════════════════════════════════════════════
+
+async function renderNaoConformidades(){
+  const filtroLoja = souGerencial ? `
+    <div class="field"><label>Loja</label><select class="inp" id="ncFiltroLoja" onchange="carregarNaoConformidades()">
+      <option value="">Todas as lojas (soma)</option>${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('')}
+    </select></div>` : '';
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">📊 Recorrência de Não Conformidades</h2>
+      <p class="hint">Itens mais apontados como "Não" nas Avaliações Externas — use pra direcionar treinamento e capacitação por loja e no geral.</p>
+      <div class="row">
+        ${filtroLoja}
+        <div class="field"><label>De</label><input class="inp" type="date" id="ncDataInicio" onchange="carregarNaoConformidades()"></div>
+        <div class="field"><label>Até</label><input class="inp" type="date" id="ncDataFim" onchange="carregarNaoConformidades()"></div>
+      </div>
+      <div id="naoConfLista" class="loading">Carregando…</div>
+    </div>`;
+  await carregarNaoConformidades();
+}
+
+async function buscarRespostasNaoConformes(loja, dataInicio, dataFim){
+  let qAval = sb.from('qualidade_avaliacoes').select('id, loja, data_avaliacao');
+  if(loja) qAval = qAval.eq('loja', loja);
+  if(dataInicio) qAval = qAval.gte('data_avaliacao', dataInicio);
+  if(dataFim) qAval = qAval.lte('data_avaliacao', dataFim);
+
+  const { data: avaliacoes, error: errAval } = await qAval;
+  if(errAval) throw errAval;
+  if(!avaliacoes || !avaliacoes.length) return { avaliacoes: [], respostas: [] };
+
+  const lojaPorAvaliacao = {};
+  avaliacoes.forEach(a => { lojaPorAvaliacao[a.id] = a.loja; });
+  const ids = avaliacoes.map(a => a.id);
+
+  let respostas = [];
+  for(let i=0; i<ids.length; i+=200){
+    const lote = ids.slice(i, i+200);
+    const { data, error } = await sb.from('qualidade_avaliacao_respostas').select('avaliacao_id,item_texto,setor,status').in('avaliacao_id', lote).eq('status','Não');
+    if(error) throw error;
+    respostas = respostas.concat((data||[]).map(r => ({ ...r, loja: lojaPorAvaliacao[r.avaliacao_id] })));
+  }
+  return { avaliacoes, respostas };
+}
+
+async function carregarNaoConformidades(){
+  const el = $('naoConfLista');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+
+  const loja = souGerencial ? ($('ncFiltroLoja') ? $('ncFiltroLoja').value : '') : lojaAtual;
+  const dataInicio = $('ncDataInicio') ? $('ncDataInicio').value : '';
+  const dataFim = $('ncDataFim') ? $('ncDataFim').value : '';
+
+  let avaliacoes, respostas;
+  try {
+    ({ avaliacoes, respostas } = await buscarRespostasNaoConformes(loja, dataInicio, dataFim));
+  } catch(e){ el.innerHTML = '<div class="empty">Erro: '+esc(e.message)+'</div>'; return; }
+
+  if(!avaliacoes.length){ el.innerHTML = '<div class="empty">Nenhuma avaliação externa encontrada no período/loja selecionados.</div>'; return; }
+  if(!respostas.length){ el.innerHTML = '<div class="empty">Nenhuma inconformidade registrada no período/loja selecionados. 🎉</div>'; return; }
+
+  const geral = {};
+  respostas.forEach(r => {
+    geral[r.item_texto] = geral[r.item_texto] || { item: r.item_texto, setor: r.setor, total: 0 };
+    geral[r.item_texto].total++;
+  });
+  const rankingGeral = Object.values(geral).sort((a,b) => b.total - a.total);
+
+  let html = `<h3 style="margin-top:0">${loja ? 'Ranking em '+esc(loja) : 'Ranking geral — soma de todas as lojas'} <span class="hint" style="font-weight:400">(${avaliacoes.length} avaliação${avaliacoes.length>1?'ões':''} no escopo)</span></h3>`;
+  html += renderRankingNaoConformidade(rankingGeral);
+
+  if(souGerencial && !loja){
+    const porLoja = {};
+    respostas.forEach(r => {
+      porLoja[r.loja] = porLoja[r.loja] || {};
+      porLoja[r.loja][r.item_texto] = (porLoja[r.loja][r.item_texto] || 0) + 1;
+    });
+    html += '<h3 style="margin-top:26px">Item mais recorrente por loja</h3>';
+    html += '<div class="table-wrap"><table><thead><tr><th>Loja</th><th>Item mais recorrente</th><th>Ocorrências</th></tr></thead><tbody>' +
+      Object.keys(porLoja).sort().map(l => {
+        const itens = Object.entries(porLoja[l]).sort((a,b) => b[1]-a[1]);
+        const [topItem, topQtd] = itens[0];
+        return `<tr><td>${esc(l)}</td><td>${esc(topItem)}</td><td>${topQtd}</td></tr>`;
+      }).join('') +
+      '</tbody></table></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function renderRankingNaoConformidade(ranking){
+  const max = ranking[0] ? ranking[0].total : 1;
+  return '<div class="table-wrap"><table><thead><tr><th>#</th><th>Setor</th><th>Item</th><th>Ocorrências</th><th style="min-width:120px"></th></tr></thead><tbody>' +
+    ranking.slice(0, 30).map((r,i) => `<tr>
+      <td>${i+1}</td>
+      <td>${esc(r.setor||'—')}</td>
+      <td>${esc(r.item)}</td>
+      <td><strong>${r.total}</strong></td>
+      <td><div style="background:var(--creme);border-radius:999px;height:8px;overflow:hidden"><div style="height:100%;background:#B43C3C;width:${(r.total/max*100)}%"></div></div></td>
+    </tr>`).join('') +
     '</tbody></table></div>';
 }
 
-async function abrirNovoPlano(){
-  showMsg('npMsg','','');
-  $('npDescricao').value=''; $('npResponsavel').value=''; $('npPrazo').value=hojeISO();
-  $('modalNovoPlano').classList.add('show');
-}
+async function carregarDashboardNaoConformidadesResumo(){
+  const el = $('dashPlanos');
+  const noventaDiasAtras = new Date(Date.now() - 90*86400000).toISOString().slice(0,10);
+  let respostas;
+  try {
+    ({ respostas } = await buscarRespostasNaoConformes('', noventaDiasAtras, ''));
+  } catch(e){ el.innerHTML = '<div class="empty">Erro: '+esc(e.message)+'</div>'; return; }
 
-async function salvarNovoPlano(){
-  const descricao = $('npDescricao').value.trim();
-  const prazo = $('npPrazo').value;
-  if(!descricao){ showMsg('npMsg','Descreva o plano de ação.','err'); return; }
-  if(!prazo){ showMsg('npMsg','Informe o prazo de execução.','err'); return; }
-  const { error } = await sb.from('qualidade_planos_acao').insert({
-    loja: $('npLoja').value, origem: 'manual', descricao,
-    responsavel_nome: $('npResponsavel').value.trim() || null,
-    prazo_execucao: prazo, criado_por: meuPerfil.id, criado_por_nome: meuPerfil.nome,
-  });
-  if(error){ showMsg('npMsg','Erro: '+error.message,'err'); return; }
-  fecharModal('modalNovoPlano');
-  carregarPlanos();
-}
+  if(!respostas.length){ el.innerHTML = '<div class="empty">Nenhuma inconformidade nos últimos 90 dias. 🎉</div>'; return; }
 
-let planoEditandoId = null;
+  const contagem = {};
+  respostas.forEach(r => { contagem[r.item_texto] = (contagem[r.item_texto]||0) + 1; });
+  const top5 = Object.entries(contagem).sort((a,b) => b[1]-a[1]).slice(0,5);
 
-async function editarPlano(id){
-  const { data: p } = await sb.from('qualidade_planos_acao').select('*').eq('id', id).single();
-  if(!p) return;
-  planoEditandoId = id;
-  if(!$('modalEditarPlano')){
-    document.body.insertAdjacentHTML('beforeend', `
-      <div class="modal-overlay" id="modalEditarPlano" onclick="if(event.target===this)fecharModal('modalEditarPlano')">
-        <div class="modal">
-          <h3>Editar Plano de Ação</h3>
-          <div class="field" style="margin-bottom:10px"><label>Descrição</label><textarea class="inp" id="epDescricao" rows="2"></textarea></div>
-          <div class="row">
-            <div class="field"><label>Responsável</label><input class="inp" id="epResponsavel"></div>
-            <div class="field"><label>Prazo de execução</label><input class="inp" type="date" id="epPrazo"></div>
-          </div>
-          <div class="field" style="margin-bottom:10px"><label>Status</label>
-            <select class="inp" id="epStatus">
-              <option value="pendente">Pendente</option><option value="em_andamento">Em Andamento</option><option value="concluido">Concluído</option>
-            </select>
-          </div>
-          <div class="msg" id="epMsg"></div>
-          <div class="modal-actions">
-            <button class="btn" onclick="salvarEdicaoPlano()">Salvar</button>
-            <button class="btn-danger" onclick="excluirPlano()">Excluir</button>
-            <button class="btn-outline btn" onclick="fecharModal('modalEditarPlano')">Cancelar</button>
-          </div>
-        </div>
-      </div>`);
-  }
-  $('epDescricao').value = p.descricao;
-  $('epResponsavel').value = p.responsavel_nome || '';
-  $('epPrazo').value = p.prazo_execucao;
-  $('epStatus').value = p.status;
-  showMsg('epMsg','','');
-  $('modalEditarPlano').classList.add('show');
-}
-
-async function salvarEdicaoPlano(){
-  const descricao = $('epDescricao').value.trim();
-  const prazo = $('epPrazo').value;
-  const status = $('epStatus').value;
-  if(!descricao){ showMsg('epMsg','Descreva o plano de ação.','err'); return; }
-  if(!prazo){ showMsg('epMsg','Informe o prazo de execução.','err'); return; }
-
-  const { data: atual } = await sb.from('qualidade_planos_acao').select('status').eq('id', planoEditandoId).single();
-  const payload = { descricao, prazo_execucao: prazo, status, responsavel_nome: $('epResponsavel').value.trim() || null };
-  if(status==='concluido' && atual && atual.status!=='concluido'){
-    payload.concluido_em = new Date().toISOString();
-    payload.concluido_por_nome = meuPerfil.nome;
-  }
-  const { error } = await sb.from('qualidade_planos_acao').update(payload).eq('id', planoEditandoId);
-  if(error){ showMsg('epMsg','Erro: '+error.message,'err'); return; }
-  fecharModal('modalEditarPlano');
-  carregarPlanos();
-}
-
-async function excluirPlano(){
-  await excluirPlanoDireto(planoEditandoId, true);
-}
-
-async function excluirPlanoDireto(id, veioDoModal){
-  if(!confirm('Excluir este plano de ação? Essa ação não pode ser desfeita.')) return;
-  const { error } = await sb.from('qualidade_planos_acao').delete().eq('id', id);
-  if(error){ alert('Erro: '+error.message); return; }
-  if(veioDoModal) fecharModal('modalEditarPlano');
-  carregarPlanos();
+  el.innerHTML = top5.map(([item,qtd]) => `<div class="topico"><strong>${qtd}×</strong> ${esc(item)}</div>`).join('') +
+    '<p class="hint" style="margin-top:8px">Ranking completo por loja na aba Recorrência de Não Conformidades.</p>';
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1139,10 +1210,10 @@ async function renderDashboard(){
       <div id="dashRanking" class="loading">Carregando…</div>
     </div>
     <div class="card">
-      <h2>Planos de Ação em Aberto</h2>
+      <h2>Top Não Conformidades (últimos 90 dias, todas as lojas)</h2>
       <div id="dashPlanos" class="loading">Carregando…</div>
     </div>`;
-  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardEvolucao(), carregarDashboardRanking(), carregarDashboardPlanos()]);
+  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardEvolucao(), carregarDashboardRanking(), carregarDashboardNaoConformidadesResumo()]);
 }
 
 let chartPontuacaoMesRef = null;
@@ -1282,20 +1353,6 @@ async function carregarDashboardRanking(){
         <td>${fmtPct(l.pctChecklist)}</td>
       </tr>`).join('')+
     '</tbody></table></div>';
-}
-
-async function carregarDashboardPlanos(){
-  const el = $('dashPlanos');
-  const { data, error } = await sb.from('qualidade_planos_acao').select('*').neq('status','concluido').order('prazo_execucao');
-  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
-  if(!data || !data.length){ el.innerHTML = '<div class="empty">Nenhum plano de ação em aberto. 🎉</div>'; return; }
-  el.innerHTML = data.map(p => {
-    const atrasado = p.prazo_execucao < hojeISO();
-    return `<div class="topico" style="${atrasado?'border-left-color:#B43C3C':''}">
-      <strong>${esc(p.loja)}</strong> — ${esc(p.descricao)}
-      <div class="meta">Prazo: ${fmtData(p.prazo_execucao)} ${atrasado?'⚠ Atrasado':''} ${p.responsavel_nome?'· Resp.: '+esc(p.responsavel_nome):''} · ${STATUS_LABEL[p.status]}</div>
-    </div>`;
-  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════
