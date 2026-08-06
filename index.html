@@ -153,6 +153,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidWh3cGNwZGNuYWhlYXl3bWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNjU5MzksImV4cCI6MjA5MTg0MTkzOX0.Mg4PVg96ZiV3C2Rn0GLQU9c7ui_41OlU6Ldqn5jcvyY';
@@ -206,7 +207,7 @@ async function verificarAcessoEIniciar(){
   souMasterLoja = perfil.tipo === 'master_loja';
   souBackoffice = souMaster || perfil.qualidade_backoffice === true;
   souCoordenador = perfil.qualidade_coordenador === true;
-  souGerencial = souMaster || souBackoffice || souCoordenador;
+  souGerencial = souMaster || souBackoffice || souCoordenador || perfil.tipo === 'backoffice';
   podeConfigurarAvaliacao = souMaster || souMasterLoja;
   temPapelDeLoja = ['loja','master_loja','master'].includes(perfil.tipo);
 
@@ -1194,7 +1195,10 @@ async function renderDashboard(){
       <div class="card" style="flex:1;min-width:320px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <h2 style="font-size:.95rem;margin:0">Pontuação do Mês por Loja</h2>
-          <input class="inp" type="month" id="dashMesPontuacao" style="max-width:160px" value="${new Date().toISOString().slice(0,7)}" onchange="carregarDashboardPontuacaoMes()">
+          <div style="display:flex;align-items:center;gap:8px">
+            <input class="inp" type="month" id="dashMesPontuacao" style="max-width:160px" value="${new Date().toISOString().slice(0,7)}" onchange="carregarDashboardPontuacaoMes()">
+            <button class="btn-outline btn btn-sm" onclick="exportarPontuacaoMesExcel()">📊 Exportar Excel</button>
+          </div>
         </div>
         <p class="hint" style="margin-bottom:8px">Avaliação externa mais recente de cada loja dentro do mês selecionado.</p>
         <div style="height:480px"><canvas id="chartPontuacaoMes"></canvas></div>
@@ -1273,6 +1277,33 @@ async function carregarDashboardPontuacaoMes(){
   $('dashPontuacaoMesObs').innerHTML = lojasSemNota.length
     ? '<p class="hint">Sem avaliação neste mês ainda: '+lojasSemNota.map(esc).join(', ')+'.</p>'
     : '';
+
+  // guarda pra reaproveitar na exportação, sem precisar refazer a consulta
+  window.__pontuacaoMesCache = { lojasComNota, lojasSemNota, maisRecentePorLoja, mesInput };
+}
+
+function exportarPontuacaoMesExcel(){
+  const cache = window.__pontuacaoMesCache;
+  if(!cache || (!cache.lojasComNota.length && !cache.lojasSemNota.length)){
+    alert('Nenhum dado carregado pra exportar ainda.');
+    return;
+  }
+  const { lojasComNota, lojasSemNota, maisRecentePorLoja, mesInput } = cache;
+
+  const linhas = [['Loja', 'Pontuação (%)', 'Data da Avaliação']];
+  lojasComNota.forEach(l => {
+    const a = maisRecentePorLoja[l];
+    linhas.push([l, Number(a.pontuacao_pct), fmtData(a.data_avaliacao)]);
+  });
+  lojasSemNota.forEach(l => {
+    linhas.push([l, 'Sem avaliação', '—']);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(linhas);
+  ws['!cols'] = [{ wch: 26 }, { wch: 16 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pontuação do Mês');
+  XLSX.writeFile(wb, 'pontuacao-mes-'+mesInput+'.xlsx');
 }
 
 const CORES_LOJAS = ['#6B1E2E','#A0785A','#2E7D32','#B8860B','#1F6FB2','#8B3345','#5A7A4A','#B43C3C','#4A1220','#7A5840','#3A6B6B'];
