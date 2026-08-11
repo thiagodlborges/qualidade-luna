@@ -1293,10 +1293,16 @@ async function renderDashboard(){
       <div id="dashPlanos" class="loading">Carregando…</div>
     </div>
     <div class="card">
+      <h2 style="font-size:.95rem">🪟 Média das Vitrines por Loja (últimos 30 dias)</h2>
+      <p class="hint" style="margin-bottom:8px">Média das estrelas de todas as avaliações de vitrine concluídas nos últimos 30 dias, por loja.</p>
+      <div style="height:420px"><canvas id="chartVitrineMedia"></canvas></div>
+      <div id="dashVitrineMediaObs" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
       <h2>🪟 Vitrines Aguardando Avaliação</h2>
       <div id="dashVitrinesPendentes" class="loading">Carregando…</div>
     </div>`;
-  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardEvolucao(), carregarDashboardRanking(), carregarDashboardNaoConformidadesResumo(), carregarDashboardVitrinesPendentes()]);
+  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardEvolucao(), carregarDashboardRanking(), carregarDashboardNaoConformidadesResumo(), carregarDashboardVitrinesPendentes(), carregarDashboardVitrineMedia()]);
 }
 
 async function carregarDashboardVitrinesPendentes(){
@@ -1318,6 +1324,66 @@ async function carregarDashboardVitrinesPendentes(){
       <div><div style="font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:600;color:${diasMaisAntiga>3?'#B43C3C':'var(--bordo-dark)'};line-height:1">${diasMaisAntiga}</div><div class="hint" style="margin:2px 0 0">dia${diasMaisAntiga!==1?'s':''} da mais antiga (${esc(maisAntiga.loja)})</div></div>
     </div>` +
     ranking.map(([loja,qtd]) => `<div class="topico"><strong>${qtd}</strong> — ${esc(loja)}</div>`).join('');
+}
+
+let chartVitrineMediaRef = null;
+
+async function carregarDashboardVitrineMedia(){
+  const canvas = $('chartVitrineMedia');
+  const trintaDiasAtras = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+
+  const { data, error } = await sb.from('qualidade_vitrine_avaliacoes').select('loja, estrelas')
+    .eq('status','avaliado').gte('data_avaliacao', trintaDiasAtras);
+
+  if(error){ canvas.closest('div').outerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+
+  if(chartVitrineMediaRef) chartVitrineMediaRef.destroy();
+
+  if(!data || !data.length){
+    canvas.closest('div').outerHTML = '<div class="empty">Nenhuma vitrine avaliada nos últimos 30 dias.</div>';
+    $('dashVitrineMediaObs').innerHTML = '';
+    return;
+  }
+
+  const porLoja = {};
+  data.forEach(a => {
+    porLoja[a.loja] = porLoja[a.loja] || { soma:0, qtd:0 };
+    porLoja[a.loja].soma += Number(a.estrelas);
+    porLoja[a.loja].qtd += 1;
+  });
+
+  const lojasComNota = TODAS_LOJAS.filter(l => porLoja[l])
+    .sort((a,b) => (porLoja[b].soma/porLoja[b].qtd) - (porLoja[a].soma/porLoja[a].qtd));
+  const lojasSemNota = TODAS_LOJAS.filter(l => !porLoja[l]);
+
+  const medias = lojasComNota.map(l => porLoja[l].soma / porLoja[l].qtd);
+  const qtds = lojasComNota.map(l => porLoja[l].qtd);
+  const cores = medias.map(v => v>=4?'#2E7D32': v>=3?'#B8860B':'#B43C3C');
+
+  chartVitrineMediaRef = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: lojasComNota,
+      datasets: [{ label: 'Média de estrelas', data: medias, backgroundColor: cores, borderRadius: 5, maxBarThickness: 22 }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { x: { min:0, max:5, ticks:{ stepSize:1 } } },
+      plugins: {
+        legend: { display:false },
+        tooltip: { callbacks: {
+          label: (ctx) => 'Média: '+ctx.parsed.x.toFixed(1)+' ★',
+          afterLabel: (ctx) => qtds[ctx.dataIndex]+' avaliação'+(qtds[ctx.dataIndex]>1?'ões':'')+' no período',
+        } },
+      },
+    },
+  });
+
+  $('dashVitrineMediaObs').innerHTML = lojasSemNota.length
+    ? '<p class="hint">Sem vitrine avaliada nos últimos 30 dias: '+lojasSemNota.map(esc).join(', ')+'.</p>'
+    : '';
 }
 
 let chartPontuacaoMesRef = null;
