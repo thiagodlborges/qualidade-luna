@@ -180,6 +180,9 @@ let checklistItensCache = null;
 let avaliacaoItensCache = null;
 
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Mesma sanitização usada no banco (sanitizar_pasta) — nomes de loja com espaço/acento (ex: "Buriti Mogi Guaçu")
+// quebravam o upload de fotos porque o Storage rejeita certos caracteres na chave do objeto.
+function sanitizarPastaLoja(loja){ return (loja||'').replace(/[^a-zA-Z0-9._-]/g,'_'); }
 function fmtData(d){ return d ? new Date(d+'T12:00').toLocaleDateString('pt-BR') : '—'; }
 function fmtDataHora(dt){ return dt ? new Date(dt).toLocaleString('pt-BR') : '—'; }
 function fmtPct(v){ return (v==null?'—':Number(v).toFixed(1)+'%'); }
@@ -847,7 +850,7 @@ async function excluirVitrine(id){
 }
 
 async function renderGaleriaFotosVitrine(loja, id){
-  const caminho = loja+'/'+id;
+  const caminho = sanitizarPastaLoja(loja)+'/'+id;
   const { data: arquivos } = await sb.storage.from(BUCKET_VITRINES).list(caminho);
   if(!arquivos || !arquivos.length) return '<p class="hint">Nenhuma foto enviada.</p>';
   const urls = await Promise.all(arquivos.map(a => sb.storage.from(BUCKET_VITRINES).createSignedUrl(caminho+'/'+a.name, 3600)));
@@ -913,7 +916,7 @@ async function enviarFotosVitrine(){
   if(error){ showMsg('vitrineMsg','Erro: '+error.message,'err'); btn.disabled=false; btn.textContent='📤 Enviar'; return; }
 
   for(const file of arquivos){
-    const caminho = lojaAtual+'/'+nova.id+'/'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const caminho = sanitizarPastaLoja(lojaAtual)+'/'+nova.id+'/'+Date.now()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
     const { error: upErr } = await sb.storage.from(BUCKET_VITRINES).upload(caminho, file);
     if(upErr) console.error('Falha ao subir foto da vitrine', file.name, upErr.message);
   }
