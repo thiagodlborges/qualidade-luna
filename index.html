@@ -173,6 +173,7 @@
       <div class="tab" id="tabAvaliacao" data-tab="avaliacao" onclick="mudarTab('avaliacao')" style="display:none">🔍 Avaliação Externa</div>
       <div class="tab" id="tabVitrine" data-tab="vitrine" onclick="mudarTab('vitrine')" style="display:none">🪟 Vitrine</div>
       <div class="tab" id="tabManual" data-tab="manual" onclick="mudarTab('manual')" style="display:none">📘 Manual de Padrões Operacionais</div>
+      <div class="tab" id="tabDocumentos" data-tab="documentos" onclick="mudarTab('documentos')" style="display:none">📁 Documentos</div>
       <div class="tab" id="tabNaoConformidades" data-tab="naoconf" onclick="mudarTab('naoconf')" style="display:none">📊 Recorrência de Não Conformidades</div>
       <div class="tab" id="tabDashboard" data-tab="dashboard" onclick="mudarTab('dashboard')" style="display:none">🏆 Dashboard Gerencial</div>
       <div class="tab" id="tabConfig" data-tab="config" onclick="mudarTab('config')" style="display:none">⚙ Configurações</div>
@@ -280,6 +281,7 @@ async function verificarAcessoEIniciar(){
     $('tabAvaliacao').style.display = '';
     $('tabVitrine').style.display = '';
     $('tabManual').style.display = '';
+    $('tabDocumentos').style.display = '';
     $('tabNaoConformidades').style.display = '';
   }
   if (souGerencial) $('tabDashboard').style.display = '';
@@ -341,6 +343,7 @@ function renderTab(){
   else if(currentTab==='avaliacao') renderAvaliacao();
   else if(currentTab==='vitrine') renderVitrine();
   else if(currentTab==='manual') renderManual();
+  else if(currentTab==='documentos') renderDocumentos();
   else if(currentTab==='naoconf') renderNaoConformidades();
   else if(currentTab==='dashboard') renderDashboard();
   else if(currentTab==='config') renderConfig();
@@ -1216,10 +1219,147 @@ async function excluirItemManual(id){
 }
 
 // ══════════════════════════════════════════════════════════
+// DOCUMENTOS — links pra arquivos hospedados no SharePoint da empresa.
+// O arquivo em si não fica no Supabase; só guardamos título, categoria e o
+// link. Quem tem acesso à Qualidade consegue ver e baixar; só backoffice/
+// master consegue publicar, editar ou remover um documento da lista.
+// ══════════════════════════════════════════════════════════
+let documentosCache = [];
+const podeGerenciarDocumentos = () => souBackoffice || podeConfigurarAvaliacao;
+
+async function renderDocumentos(){
+  const gerenciar = podeGerenciarDocumentos();
+  $('mainContent').innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+        <h2 style="margin:0">📁 Documentos da Qualidade</h2>
+        ${gerenciar ? '<button class="btn" onclick="abrirModalDocumento(null)">+ Novo Documento</button>' : ''}
+      </div>
+      <p class="hint">Os arquivos ficam hospedados no SharePoint da empresa — aqui só ficam os links pra acessar. Clique no título de um documento pra abrir/baixar.</p>
+      <div id="documentosConteudo" class="loading">Carregando…</div>
+    </div>
+
+    <div class="modal-overlay" id="modalDocumento" onclick="if(event.target===this)fecharModal('modalDocumento')">
+      <div class="modal">
+        <h3 id="docmTitulo">Novo Documento</h3>
+        <input type="hidden" id="docmId">
+        <div class="field" style="margin-bottom:10px"><label>Título *</label><input class="inp" id="docmTitulo2" placeholder="Ex: Procedimento de Higienização — Freezers"></div>
+        <div class="field" style="margin-bottom:10px"><label>Categoria</label><input class="inp" id="docmCategoria" placeholder="Ex: Procedimentos, Treinamentos, Fichas Técnicas..." list="docmCategoriasDatalist"><datalist id="docmCategoriasDatalist"></datalist></div>
+        <div class="field" style="margin-bottom:10px"><label>Link do SharePoint *</label><input class="inp" id="docmUrl" placeholder="https://vmtcom-my.sharepoint.com/..."></div>
+        <div class="field" style="margin-bottom:10px"><label>Descrição (opcional)</label><textarea class="inp" id="docmDescricao" rows="2" placeholder="Uma linha explicando o que é o documento"></textarea></div>
+        <div class="row">
+          <div class="field"><label>Ordem</label><input class="inp" type="number" id="docmOrdem" value="0"></div>
+          <div class="field"><label>Ativo</label><select class="inp" id="docmAtivo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+        </div>
+        <div class="msg" id="docmMsg"></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="salvarDocumento()">Salvar</button>
+          <button class="btn-outline btn" onclick="fecharModal('modalDocumento')">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+  await carregarDocumentos();
+}
+
+async function carregarDocumentos(){
+  const el = $('documentosConteudo');
+  const gerenciar = podeGerenciarDocumentos();
+  const query = gerenciar
+    ? sb.from('qualidade_documentos').select('*').order('categoria').order('ordem')
+    : sb.from('qualidade_documentos').select('*').eq('ativo', true).order('categoria').order('ordem');
+  const { data, error } = await query;
+  if(error){ el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  documentosCache = data || [];
+  if(!documentosCache.length){ el.innerHTML = '<div class="empty">Nenhum documento publicado ainda.</div>'; return; }
+
+  if(gerenciar){
+    const categorias = [...new Set(documentosCache.map(d => d.categoria))];
+    $('docmCategoriasDatalist').innerHTML = categorias.map(c => '<option value="'+esc(c)+'">').join('');
+  }
+
+  const porCategoria = {};
+  documentosCache.forEach(d => { (porCategoria[d.categoria] = porCategoria[d.categoria] || []).push(d); });
+  const categorias = Object.keys(porCategoria).sort();
+
+  el.innerHTML = categorias.map(cat => `
+    <div style="margin-bottom:18px">
+      <h3 style="margin:0 0 8px;font-size:.95rem;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em">${esc(cat)}</h3>
+      <div style="display:grid;gap:8px">
+        ${porCategoria[cat].map(d => `
+          <div class="topico ${d.ativo?'':'inativo'}" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+            <div>
+              <a href="${esc(d.url)}" target="_blank" rel="noopener" style="font-weight:600;font-size:1rem;text-decoration:none">📄 ${esc(d.titulo)}</a>
+              ${!d.ativo ? ' <span class="badge badge-na">Inativo</span>' : ''}
+              ${d.descricao ? '<div style="margin-top:4px;font-size:.85rem;color:var(--text-light)">'+esc(d.descricao)+'</div>' : ''}
+            </div>
+            ${gerenciar ? `
+              <div style="white-space:nowrap;display:flex;gap:8px">
+                <button class="btn-outline btn btn-sm" onclick="abrirModalDocumento('${d.id}')">Editar</button>
+                <button class="btn-danger" onclick="excluirDocumento('${d.id}')">🗑️</button>
+              </div>` : ''}
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function abrirModalDocumento(id){
+  showMsg('docmMsg','','');
+  if(id){
+    const d = documentosCache.find(x => x.id === id);
+    $('docmTitulo').textContent = 'Editar Documento';
+    $('docmId').value = id;
+    $('docmTitulo2').value = d.titulo;
+    $('docmCategoria').value = d.categoria;
+    $('docmUrl').value = d.url;
+    $('docmDescricao').value = d.descricao || '';
+    $('docmOrdem').value = d.ordem;
+    $('docmAtivo').value = String(d.ativo);
+  } else {
+    $('docmTitulo').textContent = 'Novo Documento';
+    $('docmId').value = '';
+    $('docmTitulo2').value=''; $('docmCategoria').value=''; $('docmUrl').value=''; $('docmDescricao').value='';
+    $('docmOrdem').value = 0;
+    $('docmAtivo').value = 'true';
+  }
+  $('modalDocumento').classList.add('show');
+}
+
+async function salvarDocumento(){
+  const titulo = $('docmTitulo2').value.trim();
+  const categoria = $('docmCategoria').value.trim() || 'Geral';
+  const url = $('docmUrl').value.trim();
+  const descricao = $('docmDescricao').value.trim() || null;
+  if(!titulo || !url){ showMsg('docmMsg','Preencha pelo menos o título e o link.','err'); return; }
+  if(!/^https?:\/\//i.test(url)){ showMsg('docmMsg','O link precisa começar com http:// ou https://','err'); return; }
+
+  const payload = { titulo, categoria, url, descricao, ordem: Number($('docmOrdem').value)||0, ativo: $('docmAtivo').value==='true', atualizado_em: new Date().toISOString() };
+  const id = $('docmId').value;
+  let error;
+  if(id){
+    ({ error } = await sb.from('qualidade_documentos').update(payload).eq('id', id));
+  } else {
+    payload.criado_por = meuPerfil.id;
+    payload.criado_por_nome = meuPerfil.nome || meuPerfil.email || null;
+    ({ error } = await sb.from('qualidade_documentos').insert(payload));
+  }
+  if(error){ showMsg('docmMsg','Erro: '+error.message,'err'); return; }
+  fecharModal('modalDocumento');
+  carregarDocumentos();
+}
+
+async function excluirDocumento(id){
+  if(!confirm('Remover este documento da lista? O arquivo continua no SharePoint — isso só tira o link daqui.')) return;
+  const { error } = await sb.from('qualidade_documentos').delete().eq('id', id);
+  if(error){ alert('Erro ao excluir: '+error.message); return; }
+  carregarDocumentos();
+}
+
+
+
+
 // ══════════════════════════════════════════════════════════
 // RECORRÊNCIA DE NÃO CONFORMIDADES (substituiu os Planos de Ação, que estavam sem uso)
 // ══════════════════════════════════════════════════════════
-
 async function renderNaoConformidades(){
   const filtroLoja = souGerencial ? `
     <div class="field"><label>Loja</label><select class="inp" id="ncFiltroLoja" onchange="carregarNaoConformidades()">
