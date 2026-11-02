@@ -1494,12 +1494,14 @@ async function renderDashboard(){
           </div>
         </div>
         <p class="hint" style="margin-bottom:8px">Avaliação externa mais recente de cada loja dentro do mês selecionado.</p>
-        <div style="height:480px"><canvas id="chartPontuacaoMes"></canvas></div>
+        <div id="wrapPontuacaoMes" style="height:480px"><canvas id="chartPontuacaoMes"></canvas></div>
         <div id="dashPontuacaoMesObs" style="margin-top:8px"></div>
       </div>
       <div class="card" style="flex:1;min-width:320px">
-        <h2 style="font-size:.95rem">Evolução Consolidada — Todas as Lojas</h2>
-        <div style="height:480px"><canvas id="chartEvolucao"></canvas></div>
+        <h2 style="font-size:.95rem">Evolução Consolidada — Pontuação do Mês por Loja</h2>
+        <p class="hint" style="margin-bottom:8px">Pontuação da avaliação externa mais recente de cada loja em cada mês.</p>
+        <div id="wrapEvolucao" style="height:480px"><canvas id="chartEvolucao"></canvas></div>
+        <div id="dashEvolucaoObs" style="margin-top:8px"></div>
       </div>
     </div>
     <div class="card">
@@ -1520,7 +1522,7 @@ async function renderDashboard(){
       <h2>🪟 Vitrines Aguardando Avaliação</h2>
       <div id="dashVitrinesPendentes" class="loading">Carregando…</div>
     </div>`;
-  await Promise.all([carregarDashboardPontuacaoMes(), carregarDashboardEvolucao(), carregarDashboardRanking(), carregarDashboardNaoConformidadesResumo(), carregarDashboardVitrinesPendentes(), carregarDashboardVitrineMedia()]);
+  await Promise.all([carregarDashboardPontuacaoMes(true), carregarDashboardEvolucao(), carregarDashboardRanking(), carregarDashboardNaoConformidadesResumo(), carregarDashboardVitrinesPendentes(), carregarDashboardVitrineMedia()]);
 }
 
 async function carregarDashboardVitrinesPendentes(){
@@ -1606,18 +1608,24 @@ async function carregarDashboardVitrineMedia(){
 
 let chartPontuacaoMesRef = null;
 
-async function carregarDashboardPontuacaoMes(){
+async function carregarDashboardPontuacaoMes(primeiraCarga){
   const canvas = $('chartPontuacaoMes');
+  const wrap = $('wrapPontuacaoMes');
+  const obs = $('dashPontuacaoMesObs');
   const mesInput = $('dashMesPontuacao').value; // "YYYY-MM"
   const [ano, mes] = mesInput.split('-').map(Number);
-  const inicioMes = new Date(ano, mes-1, 1).toISOString().slice(0,10);
-  const fimMes = new Date(ano, mes, 0).toISOString().slice(0,10);
+  const pad = n => String(n).padStart(2,'0');
+  const inicioMes = ano+'-'+pad(mes)+'-01';
+  const fimMes = ano+'-'+pad(mes)+'-'+pad(new Date(ano, mes, 0).getDate());
 
   const { data, error } = await sb.from('qualidade_avaliacoes').select('*')
     .gte('data_avaliacao', inicioMes).lte('data_avaliacao', fimMes)
     .order('data_avaliacao', { ascending: false });
 
-  if(error){ canvas.closest('div').outerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(chartPontuacaoMesRef){ chartPontuacaoMesRef.destroy(); chartPontuacaoMesRef = null; }
+  window.__pontuacaoMesCache = null;
+
+  if(error){ wrap.style.display = 'none'; obs.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
 
   // A mais recente por loja dentro do mês (o order já veio desc, então a
   // primeira ocorrência de cada loja é a mais atual).
@@ -1628,14 +1636,23 @@ async function carregarDashboardPontuacaoMes(){
     .sort((a, b) => Number(maisRecentePorLoja[b].pontuacao_pct) - Number(maisRecentePorLoja[a].pontuacao_pct));
   const lojasSemNota = TODAS_LOJAS.filter(l => !maisRecentePorLoja[l]);
 
-  if(chartPontuacaoMesRef) chartPontuacaoMesRef.destroy();
-
   if(!lojasComNota.length){
-    canvas.closest('div').outerHTML = '<div class="empty">Nenhuma avaliação registrada neste mês ainda.</div>';
-    $('dashPontuacaoMesObs').innerHTML = '';
+    // Mês recém-iniciado e ainda sem avaliação: na abertura do dashboard,
+    // mostra o último mês que tem dados em vez de uma tela vazia.
+    if(primeiraCarga === true){
+      const { data: ult } = await sb.from('qualidade_avaliacoes').select('data_avaliacao')
+        .order('data_avaliacao', { ascending: false }).limit(1);
+      if(ult && ult.length){
+        const mesUlt = ult[0].data_avaliacao.slice(0,7);
+        if(mesUlt !== mesInput){ $('dashMesPontuacao').value = mesUlt; return carregarDashboardPontuacaoMes(); }
+      }
+    }
+    wrap.style.display = 'none';
+    obs.innerHTML = '<div class="empty">Nenhuma avaliação registrada neste mês ainda.</div>';
     return;
   }
 
+  wrap.style.display = '';
   const valores = lojasComNota.map(l => Number(maisRecentePorLoja[l].pontuacao_pct));
   const cores = valores.map(v => v>=80?'#2E7D32': v>=60?'#B8860B':'#B43C3C');
   const datas = lojasComNota.map(l => fmtData(maisRecentePorLoja[l].data_avaliacao));
@@ -1658,7 +1675,7 @@ async function carregarDashboardPontuacaoMes(){
     },
   });
 
-  $('dashPontuacaoMesObs').innerHTML = lojasSemNota.length
+  obs.innerHTML = lojasSemNota.length
     ? '<p class="hint">Sem avaliação neste mês ainda: '+lojasSemNota.map(esc).join(', ')+'.</p>'
     : '';
 
@@ -1695,21 +1712,32 @@ let chartEvolucaoRef = null;
 
 async function carregarDashboardEvolucao(){
   const canvas = $('chartEvolucao');
-  const { data, error } = await sb.from('qualidade_avaliacoes').select('loja, data_avaliacao, pontuacao_pct').order('data_avaliacao', { ascending: true });
+  const wrap = $('wrapEvolucao');
+  const obs = $('dashEvolucaoObs');
+  const { data, error } = await sb.from('qualidade_avaliacoes').select('loja, data_avaliacao, pontuacao_pct').order('data_avaliacao', { ascending: false });
 
-  if(error){ canvas.closest('div').outerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
-  if(!data || !data.length){ canvas.closest('div').outerHTML = '<div class="empty">Nenhuma avaliação registrada ainda.</div>'; return; }
+  if(chartEvolucaoRef){ chartEvolucaoRef.destroy(); chartEvolucaoRef = null; }
+  if(error){ wrap.style.display = 'none'; obs.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if(!data || !data.length){ wrap.style.display = 'none'; obs.innerHTML = '<div class="empty">Nenhuma avaliação registrada ainda.</div>'; return; }
+  wrap.style.display = '';
+  obs.innerHTML = '';
 
-  // Agrupa por loja, em ordem cronológica, e numera cada avaliação como a
-  // "N-ésima visita" daquela loja — o eixo X é essa sequência, não a data.
-  const porLoja = {};
-  data.forEach(a => { (porLoja[a.loja] = porLoja[a.loja] || []).push(Number(a.pontuacao_pct)); });
+  // Pontuação do mês de cada loja = avaliação mais recente do mês
+  // (mesmo critério do gráfico "Pontuação do Mês por Loja").
+  // O order veio desc, então a primeira ocorrência loja+mês é a mais atual.
+  const porLojaMes = {};
+  const meses = new Set();
+  data.forEach(a => {
+    const m = a.data_avaliacao.slice(0,7);
+    meses.add(m);
+    porLojaMes[a.loja] = porLojaMes[a.loja] || {};
+    if(porLojaMes[a.loja][m] === undefined) porLojaMes[a.loja][m] = Number(a.pontuacao_pct);
+  });
 
-  const lojasComDados = TODAS_LOJAS.filter(l => porLoja[l] && porLoja[l].length);
-  const maxVisitas = Math.max(...lojasComDados.map(l => porLoja[l].length));
-  const labels = Array.from({ length: maxVisitas }, (_, i) => (i+1)+'ª visita');
-
-  if(chartEvolucaoRef) chartEvolucaoRef.destroy();
+  const mesesOrdenados = [...meses].sort();
+  const nomesMes = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const labels = mesesOrdenados.map(m => nomesMes[Number(m.slice(5,7))-1]+'/'+m.slice(2,4));
+  const lojasComDados = TODAS_LOJAS.filter(l => porLojaMes[l]);
 
   chartEvolucaoRef = new Chart(canvas, {
     type: 'line',
@@ -1717,19 +1745,24 @@ async function carregarDashboardEvolucao(){
       labels,
       datasets: lojasComDados.map((loja, i) => ({
         label: loja,
-        data: porLoja[loja], // mais curto que maxVisitas pra lojas com menos avaliações — Chart.js só não desenha o resto da linha
+        data: mesesOrdenados.map(m => porLojaMes[loja][m] ?? null),
         borderColor: CORES_LOJAS[i % CORES_LOJAS.length],
         backgroundColor: CORES_LOJAS[i % CORES_LOJAS.length],
         tension: .3,
-        pointRadius: 2,
+        pointRadius: 3,
         borderWidth: 2,
+        spanGaps: true, // mês sem avaliação não quebra a linha da loja
       })),
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { min:0, max:100, title: { display:true, text:'Pontuação (%)' } } },
-      plugins: { legend: { display:true, position:'bottom', labels:{ boxWidth:10, font:{ size:9 } } } },
+      interaction: { mode: 'nearest', intersect: false },
+      scales: { y: { min:0, max:100, title: { display:true, text:'Pontuação do mês (%)' } } },
+      plugins: {
+        legend: { display:true, position:'bottom', labels:{ boxWidth:10, font:{ size:9 } } },
+        tooltip: { callbacks: { label: (ctx) => ctx.dataset.label+': '+ctx.parsed.y.toFixed(1)+'%' } },
+      },
     },
   });
 }
